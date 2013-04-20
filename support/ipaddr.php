@@ -1,6 +1,6 @@
 <?php
 	// CubicleSoft PHP IP Address functions.
-	// (C) 2011 CubicleSoft.  All Rights Reserved.
+	// (C) 2013 CubicleSoft.  All Rights Reserved.
 
 	class IPAddr
 	{

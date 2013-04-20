@@ -1,6 +1,6 @@
 <?php
 	// CubicleSoft PHP SMTP e-mail functions.
-	// (C) 2012 CubicleSoft.  All Rights Reserved.
+	// (C) 2013 CubicleSoft.  All Rights Reserved.
 
 	if (!defined("CS_EMAIL_ROOT_PATH"))  define("CS_EMAIL_ROOT_PATH", str_replace("\\", "/", dirname(__FILE__)));
 
@@ -245,7 +245,7 @@
 						break;
 					}
 					else if ($lastchr == "," || $lastchr == ".")  $domain .= ".";
-					else if (preg_match('/[A-Za-z0-9]/', $lastchr))  $domain .= $lastchr;
+					else if (preg_match('/[A-Za-z0-9-]/', $lastchr))  $domain .= $lastchr;
 
 					$email = trim(substr($email, 0, -1));
 
@@ -262,6 +262,9 @@
 			}
 		}
 		$domain = strrev($domain);
+		$parts = explode(".", $domain);
+		foreach ($parts as $num => $part)  $parts[$num] = str_replace(" ", "-", trim(str_replace("-", " ", $part)));
+		$domain = implode(".", $parts);
 
 		// Forward parse out the local part of the e-mail address.
 		// Remove CFWS (comments, folding whitespace).
