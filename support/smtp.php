@@ -388,17 +388,23 @@
 		else
 		{
 			// Check for a mail server based on a DNS lookup.
-			require_once CS_EMAIL_ROOT_PATH . "/net_dns/DNS.php";
+			require_once CS_EMAIL_ROOT_PATH . "/Net/DNS2.php";
 
-			$resolver = new Net_DNS_Resolver();
-			$resolver->nameservers = (isset($options["nameservers"]) ? $options["nameservers"] : array("8.8.8.8", "8.8.4.4"));
-			$response = $resolver->query($domain, "MX");
-			if ($response && count($response->answer))  $result = array("success" => true, "email" => $email, "lookup" => true, "type" => "MX", "records" => $response);
-			else
+			$resolver = new Net_DNS2_Resolver(array("nameservers" => (isset($options["nameservers"]) ? $options["nameservers"] : array("8.8.8.8", "8.8.4.4"))));
+			try
 			{
-				$response = $resolver->query($domain, "A");
-				if ($response && count($response->answer))  $result = array("success" => true, "email" => $email, "lookup" => true, "type" => "A", "records" => $response);
-				else  $result = array("success" => false, "error" => SMTP_Translate("Invalid domain name."), "info" => $domain);
+				$response = $resolver->query($domain, "MX");
+				if ($response && count($response->answer))  $result = array("success" => true, "email" => $email, "lookup" => true, "type" => "MX", "records" => $response);
+				else
+				{
+					$response = $resolver->query($domain, "A");
+					if ($response && count($response->answer))  $result = array("success" => true, "email" => $email, "lookup" => true, "type" => "A", "records" => $response);
+					else  $result = array("success" => false, "error" => SMTP_Translate("Invalid domain name."), "info" => $domain);
+				}
+			}
+			catch (Exception $e)
+			{
+				$result = array("success" => false, "error" => SMTP_Translate("Invalid domain name.  Internal exception occurred."), "info" => SMTP_Translate("%s (%s).", $e->getMessage(), $domain));
 			}
 		}
 
