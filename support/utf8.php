@@ -1,6 +1,6 @@
 <?php
 	// CubicleSoft PHP UTF8 (Unicode) functions.
-	// (C) 2012 CubicleSoft.  All Rights Reserved.
+	// (C) 2013 CubicleSoft.  All Rights Reserved.
 
 	// Removes invalid characters from the data string.
 	// http://www.w3.org/International/questions/qa-forms-utf-8
@@ -190,11 +190,12 @@
 	// Converts UTF8 characters in a string to HTML entities.
 	function ConvertUTF8ToHTML($data)
 	{
-		return preg_replace('/([\xC0-\xF7]{1,1}[\x80-\xBF]+)/e', 'ConvertUTF8ToHTML__Callback("\\1")', $data);
+		return preg_replace_callback('/([\xC0-\xF7]{1,1}[\x80-\xBF]+)/', 'ConvertUTF8ToHTML__Callback', $data);
 	}
 
 	function ConvertUTF8ToHTML__Callback($data)
 	{
+		$data = $data[1];
 		$num = 0;
 		$data = str_split(strrev(chr((ord(substr($data, 0, 1)) % 252 % 248 % 240 % 224 % 192) + 128) . substr($data, 1)));
 		foreach ($data as $k => $v)  $num += (ord($v) % 128) * pow(64, $k);
