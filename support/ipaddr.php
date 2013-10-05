@@ -99,7 +99,7 @@
 						$ipaddr = IPAddr::NormalizeIP(array_pop($clientip));
 						$found = true;
 					}
-				} while ($found && isset($proxies[$ipaddr["ipv6"]]) || ($ipaddr["ipv4"] != "" && isset($proxies[$ipaddr["ipv4"]])));
+				} while ($found && (isset($proxies[$ipaddr["ipv6"]]) || ($ipaddr["ipv4"] != "" && isset($proxies[$ipaddr["ipv4"]]))));
 			}
 
 			return $ipaddr;
