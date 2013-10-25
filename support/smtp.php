@@ -1309,36 +1309,28 @@
 				$type = str_replace("\r", "", $attachments[$x]["type"]);
 				$type = str_replace("\n", "", $type);
 				$type = ConvertUTF8ToASCII($type);
-				if (!isset($attachments[$x]["name"]))
-				{
-					$name = "";
-
-					if (!isset($attachments[$x]["location"]))  $location = "";
-					else
-					{
-						$location = str_replace("\r", "", $attachments[$x]["location"]);
-						$location = str_replace("\n", "", $location);
-						$location = ConvertUTF8ToASCII($location);
-					}
-
-					if (!isset($attachments[$x]["cid"]))  $cid = "";
-					else
-					{
-						$location = "";
-
-						$cid = str_replace("\r", "", $attachments[$x]["cid"]);
-						$cid = str_replace("\n", "", $cid);
-						$cid = ConvertUTF8ToASCII($cid);
-					}
-				}
+				if (!isset($attachments[$x]["name"]))  $name = "";
 				else
 				{
-					$location = "";
-					$cid = "";
-
 					$name = str_replace("\r", "", $attachments[$x]["name"]);
 					$name = str_replace("\n", "", $name);
 					$name = FilenameSafe($name);
+				}
+
+				if (!isset($attachments[$x]["location"]))  $location = "";
+				else
+				{
+					$location = str_replace("\r", "", $attachments[$x]["location"]);
+					$location = str_replace("\n", "", $location);
+					$location = ConvertUTF8ToASCII($location);
+				}
+
+				if (!isset($attachments[$x]["cid"]))  $cid = "";
+				else
+				{
+					$cid = str_replace("\r", "", $attachments[$x]["cid"]);
+					$cid = str_replace("\n", "", $cid);
+					$cid = ConvertUTF8ToASCII($cid);
 				}
 				$mimecontent .= "Content-Type: " . $type . ($name != "" ? "; name=\"" . $name . "\"" : "") . "\r\n";
 				if ($cid != "")  $mimecontent .= "Content-ID: <" . $cid . ">\r\n";
