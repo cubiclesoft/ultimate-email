@@ -1260,12 +1260,13 @@
 			$destheaders .= $messagefromaddr;
 			if ($headers != "")  $destheaders .= $headers;
 			$destheaders .= "MIME-Version: 1.0\r\n";
-			$destheaders .= $messagetoaddr;
+			if (!isset($options["usemail"]) || !$options["usemail"])  $destheaders .= $messagetoaddr;
 			if ($replytoaddr != "")  $destheaders .= $replytoaddr;
 			if ($ccaddr != "")  $destheaders .= $ccaddr;
 			if ($bccaddr != "")  $destheaders .= $bccaddr;
 			if (!isset($options["usemail"]) || !$options["usemail"])  $destheaders .= "Subject: " . $subject . "\r\n";
-			if (count($attachments))  $destheaders .= "Content-Type: multipart/mixed; boundary=\"" . $mimeboundary . "\"\r\n";
+			if (count($attachments) && isset($options["inlineattachments"]) && $options["inlineattachments"])  $destheaders .= "Content-Type: multipart/related; boundary=\"" . $mimeboundary . "\"; type=\"multipart/alternative\"\r\n";
+			else if (count($attachments))  $destheaders .= "Content-Type: multipart/mixed; boundary=\"" . $mimeboundary . "\"\r\n";
 			else if ($textmessage != "" && $htmlmessage != "")  $destheaders .= "Content-Type: multipart/alternative; boundary=\"" . $mimeboundary . "\"\r\n";
 			else  $mimeboundary = "";
 
@@ -1274,7 +1275,9 @@
 			else
 			{
 				$mimeboundary2 = "--------" . MIME_RandomString(25);
+				$mimecontent .= "--" . $mimeboundary . "\r\n";
 				$mimecontent .= "Content-Type: multipart/alternative; boundary=\"" . $mimeboundary2 . "\"\r\n";
+				$mimecontent .= "\r\n";
 			}
 
 			if ($textmessage != "")
