@@ -1242,7 +1242,7 @@
 			$destheaders .= $messagefromaddr;
 			if ($headers != "")  $destheaders .= $headers;
 			$destheaders .= "MIME-Version: 1.0\r\n";
-			$destheaders .= $messagetoaddr;
+			if (!isset($options["usemail"]) || !$options["usemail"])  $destheaders .= $messagetoaddr;
 			if ($replytoaddr != "")  $destheaders .= $replytoaddr;
 			if ($ccaddr != "")  $destheaders .= $ccaddr;
 			if ($bccaddr != "")  $destheaders .= $bccaddr;
