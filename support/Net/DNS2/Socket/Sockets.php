@@ -43,7 +43,7 @@
  * @author    Mike Pultz <mike@mikepultz.com>
  * @copyright 2010 Mike Pultz <mike@mikepultz.com>
  * @license   http://www.opensource.org/licenses/bsd-license.php  BSD License
- * @version   SVN: $Id: Sockets.php 198 2013-05-26 05:05:22Z mike.pultz $
+ * @version   SVN: $Id: Sockets.php 217 2013-11-16 21:44:58Z mike.pultz $
  * @link      http://pear.php.net/package/Net_DNS2
  * @since     File available since Release 0.6.0
  *
@@ -144,18 +144,16 @@ class Net_DNS2_Socket_Sockets extends Net_DNS2_Socket
         //
         // select on write to check if the call to connect worked
         //
-        switch(@socket_select($read, $write, $except, $this->timeout)) {
-        case false:
+        $result = @socket_select($read, $write, $except, $this->timeout);
+        if ($result === false) {
+
             $this->last_error = socket_strerror(socket_last_error());
             return false;
-            break;
 
-        case 0:
+        } else if ($result == 0) {
+
+            $this->last_error = 'timeout on write select for connect()';
             return false;
-            break;
-            
-        default:
-            ;
         }
 
         return true;
@@ -202,18 +200,16 @@ class Net_DNS2_Socket_Sockets extends Net_DNS2_Socket
         //
         // select on write
         //
-        switch(@socket_select($read, $write, $except, $this->timeout)) {
-        case false:
+        $result = @socket_select($read, $write, $except, $this->timeout);
+        if ($result === false) {
+
             $this->last_error = socket_strerror(socket_last_error());
             return false;
-            break;
 
-        case 0:
+        } else if ($result == 0) {
+
+            $this->last_error = 'timeout on write select()';
             return false;
-            break;
-
-        default:
-            ;
         }
 
         //
@@ -271,20 +267,18 @@ class Net_DNS2_Socket_Sockets extends Net_DNS2_Socket
         //
         // select on read
         //
-        switch(@socket_select($read, $write, $except, $this->timeout)) {
-        case false:
+        $result = @socket_select($read, $write, $except, $this->timeout);
+        if ($result === false) {
+
             $this->last_error = socket_strerror(socket_last_error());
             return false;
-            break;
 
-        case 0:
+        } else if ($result == 0) {
+
+            $this->last_error = 'timeout on read select()';
             return false;
-            break;
-            
-        default:
-            ;
         }
-    
+
         $data = '';
         $length = Net_DNS2_Lookups::DNS_MAX_UDP_SIZE;
 
