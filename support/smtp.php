@@ -1271,6 +1271,8 @@
 			else  $mimeboundary = "";
 
 			if ($mimeboundary != "")  $mimecontent = "This is a multi-part message in MIME format.\r\n";
+			else  $mimecontent = "";
+
 			if ($textmessage == "" || $htmlmessage == "" || !count($attachments))  $mimeboundary2 = $mimeboundary;
 			else
 			{
@@ -1282,10 +1284,18 @@
 
 			if ($textmessage != "")
 			{
-				$mimecontent .= "--" . $mimeboundary2 . "\r\n";
-				$mimecontent .= "Content-Type: text/plain; charset=UTF-8\r\n";
-				$mimecontent .= "Content-Transfer-Encoding: quoted-printable\r\n";
-				$mimecontent .= "\r\n";
+				if ($mimeboundary2 != "")
+				{
+					$mimecontent .= "--" . $mimeboundary2 . "\r\n";
+					$mimecontent .= "Content-Type: text/plain; charset=UTF-8\r\n";
+					$mimecontent .= "Content-Transfer-Encoding: quoted-printable\r\n";
+					$mimecontent .= "\r\n";
+				}
+				else
+				{
+					$destheaders .= "Content-Type: text/plain; charset=UTF-8\r\n";
+					$destheaders .= "Content-Transfer-Encoding: quoted-printable\r\n";
+				}
 				$message = ConvertEmailMessageToRFC1341($textmessage);
 				$mimecontent .= $message;
 				$mimecontent .= "\r\n";
@@ -1293,16 +1303,24 @@
 
 			if ($htmlmessage != "")
 			{
-				$mimecontent .= "--" . $mimeboundary2 . "\r\n";
-				$mimecontent .= "Content-Type: text/html; charset=UTF-8\r\n";
-				$mimecontent .= "Content-Transfer-Encoding: quoted-printable\r\n";
-				$mimecontent .= "\r\n";
+				if ($mimeboundary2 != "")
+				{
+					$mimecontent .= "--" . $mimeboundary2 . "\r\n";
+					$mimecontent .= "Content-Type: text/html; charset=UTF-8\r\n";
+					$mimecontent .= "Content-Transfer-Encoding: quoted-printable\r\n";
+					$mimecontent .= "\r\n";
+				}
+				else
+				{
+					$destheaders .= "Content-Type: text/html; charset=UTF-8\r\n";
+					$destheaders .= "Content-Transfer-Encoding: quoted-printable\r\n";
+				}
 				$message = ConvertEmailMessageToRFC1341($htmlmessage);
 				$mimecontent .= $message;
 				$mimecontent .= "\r\n";
 			}
 
-			if ($textmessage != "" && $htmlmessage != "" && count($attachments))  $mimecontent .= "--" . $mimeboundary2 . "--\r\n";
+			if ($mimeboundary2 != "")  $mimecontent .= "--" . $mimeboundary2 . "--\r\n";
 
 			// Process the attachments.
 			$y = count($attachments);
@@ -1345,12 +1363,12 @@
 				$mimecontent .= "\r\n";
 			}
 
-			$mimecontent .= "--" . $mimeboundary . "--\r\n";
+			if ($mimeboundary != "")  $mimecontent .= "--" . $mimeboundary . "--\r\n";
 			$message = $mimecontent;
 		}
 
 		if (isset($options["returnresults"]) && $options["returnresults"])  return array("toaddr" => $toaddr, "fromaddr" => $fromaddr, "headers" => $destheaders, "subject" => $subject, "message" => $message);
-		else if (isset($options["usemail"]) && $options["usemail"])  return mail($toaddr, $subject, $message, $destheaders);
+		else if (isset($options["usemail"]) && $options["usemail"])  return mail($toaddr, $subject, str_replace("\r\n", "\n", $message), $destheaders);
 		else  return SendSMTPEmail($toaddr, $fromaddr, $destheaders . "\r\n" . $message, $options);
 	}
 ?>
