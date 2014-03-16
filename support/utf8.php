@@ -195,7 +195,7 @@
 			return preg_replace_callback('/([\xC0-\xF7]{1,1}[\x80-\xBF]+)/', 'ConvertToHTML__Callback', $data);
 		}
 
-		protected static function ConvertToHTML__Callback($data)
+		private static function ConvertToHTML__Callback($data)
 		{
 			$data = $data[1];
 			$num = 0;
