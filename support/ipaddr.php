@@ -73,7 +73,7 @@
 
 		static function GetRemoteIP($proxies = array())
 		{
-			$ipaddr = IPAddr::NormalizeIP(isset($_SERVER["REMOTE_ADDR"]) ? $_SERVER["REMOTE_ADDR"] : "127.0.0.1");
+			$ipaddr = self::NormalizeIP(isset($_SERVER["REMOTE_ADDR"]) ? $_SERVER["REMOTE_ADDR"] : "127.0.0.1");
 
 			// Check for trusted proxies.  Stop at first untrusted IP in the chain.
 			if (isset($proxies[$ipaddr["ipv6"]]) || ($ipaddr["ipv4"] != "" && isset($proxies[$ipaddr["ipv4"]])))
@@ -91,12 +91,12 @@
 					$header = strtolower($header);
 					if ($header == "xforward" && count($xforward) > 0)
 					{
-						$ipaddr = IPAddr::NormalizeIP(array_pop($xforward));
+						$ipaddr = self::NormalizeIP(array_pop($xforward));
 						$found = true;
 					}
 					else if ($header == "clientip" && count($clientip) > 0)
 					{
-						$ipaddr = IPAddr::NormalizeIP(array_pop($clientip));
+						$ipaddr = self::NormalizeIP(array_pop($clientip));
 						$found = true;
 					}
 				} while ($found && (isset($proxies[$ipaddr["ipv6"]]) || ($ipaddr["ipv4"] != "" && isset($proxies[$ipaddr["ipv4"]]))));
@@ -107,7 +107,7 @@
 
 		static function IsMatch($pattern, $ipaddr)
 		{
-			if (is_string($ipaddr))  $ipaddr = IPAddr::NormalizeIP($ipaddr);
+			if (is_string($ipaddr))  $ipaddr = self::NormalizeIP($ipaddr);
 
 			if (strpos($pattern, ":") !== false)
 			{
