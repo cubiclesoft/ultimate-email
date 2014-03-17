@@ -182,7 +182,7 @@
 			$y = strlen($data);
 			while ($pos < $y)
 			{
-				if (UTF8NextChrPos($data, $y, $pos, $size) && $size == 1)  $result .= $data[$pos];
+				if (self::NextChrPos($data, $y, $pos, $size) && $size == 1)  $result .= $data[$pos];
 				else if (!$size)  $size = 1;
 			}
 

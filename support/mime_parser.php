@@ -39,32 +39,26 @@
 							$result .= substr($currline, 0, $pos);
 							$x++;
 							$currline = $data[$x];
-							if ($currline == "")  $result .= "\r\n";
 						}
 						else if ($pos <= strlen($currline) - 3)
 						{
 							$result .= substr($currline, 0, $pos) . chr(hexdec(substr($currline, $pos + 1, 2)));
 							$currline = substr($currline, $pos + 3);
-							if ($currline == "")
-							{
-								$x++;
-								$currline = $data[$x];
-								if ($currline == "")  $result .= "\r\n";
-							}
 						}
 						else
 						{
 							$x++;
 							$currline = $data[$x];
-							if ($currline == "")  $result .= "\r\n";
 						}
 					}
 					else
 					{
-						$result .= $currline . "\r\n";
+						$result .= $currline;
 						$currline = "";
 					}
 				} while ($currline != "");
+
+				$result .= "\r\n";
 			}
 
 			$result = rtrim($result) . "\r\n";
@@ -94,7 +88,7 @@
 					$data3 = self::ConvertCharset($data2, $encoding, "UTF-8");
 					if ($data3 !== false)  $data2 = $data3;
 
-					$data2 = UTF8::MakeValid($data2);
+					$data2 = UTF8::MakeValid(trim($data2));
 				}
 				$data = substr($data, 0, $pos) . $data2 . substr($data, $pos4 + 2);
 

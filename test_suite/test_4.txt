@@ -1,0 +1,25 @@
+<html><body>
+<style type="text/css">
+body { font-family: Verdana, Arial, Helvetica, sans-serif; }
+</style>
+<table width="600">
+<tr><td><img src="http://barebonescms.com/images/test_newsletter_header.png" /></td></tr>
+<tr><td>
+<table cellspacing="15"><tr><td>
+<p>Once upon a time, there was this crazy guy named Thomas.<br />
+And he ran a crazy company called CubicleSoft.</p>
+
+<p>He wrote a library that did e-mail that actually worked.<br />
+In PHP.</p>
+
+<p>It was awesome.<br />
+Eventually people decided it was so awesome, they parted with some money.</p>
+
+<p>Thomas loves your money.<br />
+Don't forget to donate.</p>
+
+<p><a href="http://barebonescms.com/donate/">http://barebonescms.com/donate/</a></p>
+</tr></td></table>
+</td></tr>
+</table>
+</body></html>

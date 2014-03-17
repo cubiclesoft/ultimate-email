@@ -8,6 +8,7 @@
 
 	class SMTP
 	{
+		public static $dnsttlcache = array();
 		private static $purifier = false, $html = false;
 
 		// Reduce dependencies.  Duplicates code though.
@@ -395,37 +396,67 @@
 			$y = strlen($local);
 			$y2 = strlen($domain);
 			$email = $local . "@" . $domain;
-			if (!$y)  return array("success" => false, "error" => self::SMTP_Translate("Missing local part of e-mail address."), "info" => $email);
-			if (!$y2)  return array("success" => false, "error" => self::SMTP_Translate("Missing domain part of e-mail address."), "info" => $email);
-			if ($y > 64 || $y2 > 253 || $y + $y2 + 1 > 253)  return array("success" => false, "error" => self::SMTP_Translate("E-mail address is too long."), "info" => $email);
+			if (!$y)  return array("success" => false, "error" => self::SMTP_Translate("Missing local part of e-mail address."), "errorcode" => "missing_local_part", "info" => $email);
+			if (!$y2)  return array("success" => false, "error" => self::SMTP_Translate("Missing domain part of e-mail address."), "errorcode" => "missing_domain_part", "info" => $email);
+			if ($y > 64 || $y2 > 253 || $y + $y2 + 1 > 253)  return array("success" => false, "error" => self::SMTP_Translate("E-mail address is too long."), "errorcode" => "email_too_long", "info" => $email);
 
 			// Process results.
 			if (substr($domain, 0, 1) == "[" && substr($domain, -1) == "]")  $result = array("success" => true, "email" => $email, "lookup" => false, "type" => "IP");
 			else if (isset($options["usedns"]) && $options["usedns"] === false)  $result = array("success" => true, "email" => $email, "lookup" => false, "type" => "Domain");
+			else if ((!isset($options["usednsttlcache"]) || $options["usednsttlcache"] === true) && isset(self::$dnsttlcache[$domain]) && self::$dnsttlcache[$domain] >= time())  $result = array("success" => true, "email" => $email, "lookup" => false, "type" => "CachedDNS");
 			else
 			{
 				// Check for a mail server based on a DNS lookup.
-				if (!class_exists("Net_DNS2_Resolver"))  require_once str_replace("\\", "/", dirname(__FILE__)) . "/Net/DNS2.php";
-
-				$resolver = new Net_DNS2_Resolver(array("nameservers" => (isset($options["nameservers"]) ? $options["nameservers"] : array("8.8.8.8", "8.8.4.4"))));
-				try
-				{
-					$response = $resolver->query($domain, "MX");
-					if ($response && count($response->answer))  $result = array("success" => true, "email" => $email, "lookup" => true, "type" => "MX", "records" => $response);
-					else
-					{
-						$response = $resolver->query($domain, "A");
-						if ($response && count($response->answer))  $result = array("success" => true, "email" => $email, "lookup" => true, "type" => "A", "records" => $response);
-						else  $result = array("success" => false, "error" => self::SMTP_Translate("Invalid domain name."), "info" => $domain);
-					}
-				}
-				catch (Exception $e)
-				{
-					$result = array("success" => false, "error" => self::SMTP_Translate("Invalid domain name.  Internal exception occurred."), "info" => self::SMTP_Translate("%s (%s).", $e->getMessage(), $domain));
-				}
+				$result = self::GetDNSRecord($domain, array("MX", "A"), (isset($options["nameservers"]) ? $options["nameservers"] : array("8.8.8.8", "8.8.4.4")), (!isset($options["usednsttlcache"]) || $options["usednsttlcache"] === true));
+				if ($result["success"])  $result = array("success" => true, "email" => $email, "lookup" => true, "type" => $result["type"], "records" => $result["records"]);
 			}
 
 			return $result;
+		}
+
+		public static function UpdateDNSTTLCache()
+		{
+			$ts = time();
+			foreach (self::$dnsttlcache as $domain => $ts2)
+			{
+				if ($ts2 > $ts)  unset(self::$dnsttlcache[$domain]);
+			}
+		}
+
+		public static function GetDNSRecord($domain, $types = array("MX", "A"), $nameservers = array("8.8.8.8", "8.8.4.4"), $cache = true)
+		{
+			// Check for a mail server based on a DNS lookup.
+			if (!class_exists("Net_DNS2_Resolver"))  require_once str_replace("\\", "/", dirname(__FILE__)) . "/Net/DNS2.php";
+
+			$resolver = new Net_DNS2_Resolver(array("nameservers" => $nameservers));
+			try
+			{
+				foreach ($types as $type)
+				{
+					$response = $resolver->query($domain, $type);
+					if ($response && count($response->answer))
+					{
+						if ($cache)
+						{
+							$minttl = -1;
+							foreach ($response->answer as $answer)
+							{
+								if ($minttl < 0 || ($answer->ttl > 0 && $answer->ttl < $minttl))  $minttl = $answer->ttl;
+							}
+
+							self::$dnsttlcache[$domain] = time() + $minttl;
+						}
+
+						return array("success" => true, "type" => $type, "records" => $response);
+					}
+				}
+
+				return array("success" => false, "error" => self::SMTP_Translate("Invalid domain name or missing DNS record."), "errorcode" => "invalid_domain_or_missing_record", "info" => $domain);
+			}
+			catch (Exception $e)
+			{
+				return array("success" => false, "error" => self::SMTP_Translate("Invalid domain name.  Internal exception occurred."), "errorcode" => "dns_library_exception", "info" => self::SMTP_Translate("%s (%s).", $e->getMessage(), $domain));
+			}
 		}
 
 		public static function EmailAddressesToNamesAndEmail(&$destnames, &$destaddrs, $emailaddrs, $removenames = false, $options = array())
@@ -790,6 +821,33 @@
 			return $result;
 		}
 
+		private static function ProcessSSLOptions(&$options, $key, $host)
+		{
+			if (isset($options[$key]["auto_cainfo"]))
+			{
+				unset($options[$key]["auto_cainfo"]);
+
+				$cainfo = ini_get("curl.cainfo");
+				if ($cainfo !== false && strlen($cainfo) > 0)  $options[$key]["cafile"] = $cainfo;
+				else if (file_exists(str_replace("\\", "/", dirname(__FILE__)) . "/cacert.pem"))  $options[$key]["cafile"] = str_replace("\\", "/", dirname(__FILE__)) . "/cacert.pem";
+			}
+
+			if (isset($options[$key]["auto_cn_match"]))
+			{
+				unset($options[$key]["auto_cn_match"]);
+
+				$options[$key]["CN_match"] = $host;
+			}
+
+			if (isset($options[$key]["auto_sni"]))
+			{
+				unset($options[$key]["auto_sni"]);
+
+				$options[$key]["SNI_enabled"] = true;
+				$options[$key]["SNI_server_name"] = $host;
+			}
+		}
+
 		// Sends an e-mail by directly connecting to a SMTP server using PHP sockets.  Much more powerful than calling mail().
 		public static function SendSMTPEmail($toaddr, $fromaddr, $message, $options = array())
 		{
@@ -797,8 +855,8 @@
 			$temptoaddrs = array();
 			$tempfromnames = array();
 			$tempfromaddrs = array();
-			if (!self::EmailAddressesToNamesAndEmail($temptonames, $temptoaddrs, $toaddr, true, $options))  return array("success" => false, "error" => self::SMTP_Translate("Invalid 'To' e-mail address(es)."), "info" => $toaddr);
-			if (!self::EmailAddressesToNamesAndEmail($tempfromnames, $tempfromaddrs, $fromaddr, true, $options))  return array("success" => false, "error" => self::SMTP_Translate("Invalid 'From' e-mail address."), "info" => $fromaddr);
+			if (!self::EmailAddressesToNamesAndEmail($temptonames, $temptoaddrs, $toaddr, true, $options))  return array("success" => false, "error" => self::SMTP_Translate("Invalid 'To' e-mail address(es)."), "errorcode" => "invalid_to_address", "info" => $toaddr);
+			if (!self::EmailAddressesToNamesAndEmail($tempfromnames, $tempfromaddrs, $fromaddr, true, $options))  return array("success" => false, "error" => self::SMTP_Translate("Invalid 'From' e-mail address."), "errorcode" => "invalid_from_address", "info" => $fromaddr);
 
 			$server = (isset($options["server"]) ? $options["server"] : "localhost");
 			$secure = (isset($options["secure"]) ? $options["secure"] : false);
@@ -818,17 +876,34 @@
 			$hostname = (isset($options["hostname"]) ? $options["hostname"] : "[" . trim(isset($_SERVER["SERVER_ADDR"]) && $_SERVER["SERVER_ADDR"] != "127.0.0.1" ? $_SERVER["SERVER_ADDR"] : "192.168.0.101") . "]");
 			$errornum = 0;
 			$errorstr = "";
-			$fp = fsockopen(($secure ? "ssl://" : "") . $server, $port, $errornum, $errorstr, 10);
-			if ($fp === false)  return array("success" => false, "error" => self::SMTP_Translate("Unable to establish a SMTP connection to '%s'.", ($secure ? "ssl://" : "") . $server . ":" . $port), "info" => $errorstr . " (" . $errornum . ")");
+			if (!isset($options["connecttimeout"]))  $options["connecttimeout"] = 10;
+			if (!function_exists("stream_socket_client"))  $fp = @fsockopen(($secure ? "tls://" : "") . $server, $port, $errornum, $errorstr, $options["connecttimeout"]);
+			else
+			{
+				$context = @stream_context_create();
+				if ($secure && isset($options["sslopts"]) && is_array($options["sslopts"]))
+				{
+					self::ProcessSSLOptions($options, "sslopts", $server);
+					foreach ($options["sslopts"] as $key => $val)  @stream_context_set_option($context, "ssl", $key, $val);
+				}
+				$fp = @stream_socket_client(($secure ? "tls://" : "") . $server . ":" . $port, $errornum, $errorstr, $options["connecttimeout"], STREAM_CLIENT_CONNECT, $context);
+
+				$contextopts = stream_context_get_options($context);
+				if ($secure && isset($options["sslopts"]) && is_array($options["sslopts"]) && isset($contextopts["ssl"]["peer_certificate"]))
+				{
+					if (isset($options["debug_callback"]))  $options["debug_callback"]("peercert", @openssl_x509_parse($contextopts["ssl"]["peer_certificate"]), $options["debug_callback_opts"]);
+				}
+			}
+			if ($fp === false)  return array("success" => false, "error" => self::SMTP_Translate("Unable to establish a SMTP connection to '%s'.", ($secure ? "tls://" : "") . $server . ":" . $port), "errorcode" => "connection_failure", "info" => $errorstr . " (" . $errornum . ")");
 
 			// Get initial connection information.
 			$rawsend = "";
 			$rawrecv = "";
-			if (!self::ProcessSMTPRequest("", $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug) || $smtpcode != 220)  return array("success" => false, "error" => self::SMTP_Translate("Expected a 220 response from the SMTP server upon connecting."), "info" => $smtpcode . " " . $smtpdata);
+			if (!self::ProcessSMTPRequest("", $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug) || $smtpcode != 220)  return array("success" => false, "error" => self::SMTP_Translate("Expected a 220 response from the SMTP server upon connecting."), "errorcode" => "invalid_response", "info" => $smtpcode . " " . $smtpdata);
 			$size = 0;
 			if (strpos($smtpdata, " ESMTP") !== false)
 			{
-				if (!self::ProcessSMTPRequest("EHLO " . $hostname, $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug) || $smtpcode != 250)  return array("success" => false, "error" => self::SMTP_Translate("Expected a 250 response from the SMTP server upon EHLO."), "info" => $smtpcode . " " . $smtpdata);
+				if (!self::ProcessSMTPRequest("EHLO " . $hostname, $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug) || $smtpcode != 250)  return array("success" => false, "error" => self::SMTP_Translate("Expected a 250 response from the SMTP server upon EHLO."), "errorcode" => "invalid_response", "info" => $smtpcode . " " . $smtpdata);
 
 				// Process supported ESMTP extensions.
 				$auth = "";
@@ -842,21 +917,21 @@
 
 				if (strpos($auth, "LOGIN") !== false && ($username != "" || $password != ""))
 				{
-					if (!self::ProcessSMTPRequest("AUTH LOGIN", $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug) || $smtpcode != 334)  return array("success" => false, "error" => self::SMTP_Translate("Expected a 334 response from the SMTP server upon AUTH LOGIN."), "info" => $smtpcode . " " . $smtpdata);
-					if (!self::ProcessSMTPRequest(base64_encode($username), $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug) || $smtpcode != 334)  return array("success" => false, "error" => self::SMTP_Translate("Expected a 334 response from the SMTP server upon AUTH LOGIN username."), "info" => $smtpcode . " " . $smtpdata);
-					if (!self::ProcessSMTPRequest(base64_encode($password), $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug) || $smtpcode != 235)  return array("success" => false, "error" => self::SMTP_Translate("Expected a 235 response from the SMTP server upon AUTH LOGIN password."), "info" => $smtpcode . " " . $smtpdata);
+					if (!self::ProcessSMTPRequest("AUTH LOGIN", $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug) || $smtpcode != 334)  return array("success" => false, "error" => self::SMTP_Translate("Expected a 334 response from the SMTP server upon AUTH LOGIN."), "errorcode" => "invalid_response", "info" => $smtpcode . " " . $smtpdata);
+					if (!self::ProcessSMTPRequest(base64_encode($username), $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug) || $smtpcode != 334)  return array("success" => false, "error" => self::SMTP_Translate("Expected a 334 response from the SMTP server upon AUTH LOGIN username."), "errorcode" => "invalid_response", "info" => $smtpcode . " " . $smtpdata);
+					if (!self::ProcessSMTPRequest(base64_encode($password), $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug) || $smtpcode != 235)  return array("success" => false, "error" => self::SMTP_Translate("Expected a 235 response from the SMTP server upon AUTH LOGIN password."), "errorcode" => "invalid_response", "info" => $smtpcode . " " . $smtpdata);
 				}
 			}
-			else if (!self::ProcessSMTPRequest("HELO " . $hostname, $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug) || $smtpcode != 250)  return array("success" => false, "error" => self::SMTP_Translate("Expected a 250 response from the SMTP server upon HELO."), "info" => $smtpcode . " " . $smtpdata);
+			else if (!self::ProcessSMTPRequest("HELO " . $hostname, $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug) || $smtpcode != 250)  return array("success" => false, "error" => self::SMTP_Translate("Expected a 250 response from the SMTP server upon HELO."), "errorcode" => "invalid_response", "info" => $smtpcode . " " . $smtpdata);
 
 			// Send the message.
-			if (!self::ProcessSMTPRequest("MAIL FROM:<" . $tempfromaddrs[0] . ">" . ($size ? " SIZE=" . strlen($message) : ""), $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug) || $smtpcode != 250)  return array("success" => false, "error" => self::SMTP_Translate("Expected a 250 response from the SMTP server upon MAIL FROM."), "info" => $smtpcode . " " . $smtpdata);
+			if (!self::ProcessSMTPRequest("MAIL FROM:<" . $tempfromaddrs[0] . ">" . ($size ? " SIZE=" . strlen($message) : ""), $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug) || $smtpcode != 250)  return array("success" => false, "error" => self::SMTP_Translate("Expected a 250 response from the SMTP server upon MAIL FROM."), "errorcode" => "invalid_response", "info" => $smtpcode . " " . $smtpdata);
 			foreach ($temptoaddrs as $addr)
 			{
-				if (!self::ProcessSMTPRequest("RCPT TO:<" . $addr . ">", $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug) || $smtpcode != 250)  return array("success" => false, "error" => self::SMTP_Translate("Expected a 250 response from the SMTP server upon RCPT TO."), "info" => $smtpcode . " " . $smtpdata);
+				if (!self::ProcessSMTPRequest("RCPT TO:<" . $addr . ">", $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug) || $smtpcode != 250)  return array("success" => false, "error" => self::SMTP_Translate("Expected a 250 response from the SMTP server upon RCPT TO."), "errorcode" => "invalid_response", "info" => $smtpcode . " " . $smtpdata);
 			}
-			if (!self::ProcessSMTPRequest("DATA", $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug) || $smtpcode != 354)  return array("success" => false, "error" => self::SMTP_Translate("Expected a 354 response from the SMTP server upon DATA."), "info" => $smtpcode . " " . $smtpdata);
-			if (!self::ProcessSMTPRequest($message . "\r\n.", $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug) || $smtpcode != 250)  return array("success" => false, "error" => self::SMTP_Translate("Expected a 250 response from the SMTP server upon sending the e-mail."), "info" => $smtpcode . " " . $smtpdata);
+			if (!self::ProcessSMTPRequest("DATA", $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug) || $smtpcode != 354)  return array("success" => false, "error" => self::SMTP_Translate("Expected a 354 response from the SMTP server upon DATA."), "errorcode" => "invalid_response", "info" => $smtpcode . " " . $smtpdata);
+			if (!self::ProcessSMTPRequest($message . "\r\n.", $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug) || $smtpcode != 250)  return array("success" => false, "error" => self::SMTP_Translate("Expected a 250 response from the SMTP server upon sending the e-mail."), "errorcode" => "invalid_response", "info" => $smtpcode . " " . $smtpdata);
 
 			self::ProcessSMTPRequest("QUIT", $smtpcode, $smtpdata, $rawsend, $rawrecv, $fp, $debug);
 
@@ -1228,163 +1303,174 @@
 			return $result;
 		}
 
-	function SendEmail($fromaddr, $toaddr, $subject, $options = array())
-	{
-		$subject = str_replace("\r", " ", $subject);
-		$subject = str_replace("\n", " ", $subject);
-		if (!UTF8::IsASCII($subject))  $subject = self::ConvertToRFC1342($subject);
-
-		$replytoaddr = (isset($options["replytoaddr"]) ? $options["replytoaddr"] : "");
-		$ccaddr = (isset($options["ccaddr"]) ? $options["ccaddr"] : "");
-		$bccaddr = (isset($options["bccaddr"]) ? $options["bccaddr"] : "");
-		$headers = (isset($options["headers"]) ? $options["headers"] : "");
-		$textmessage = (isset($options["textmessage"]) ? $options["textmessage"] : "");
-		$htmlmessage = (isset($options["htmlmessage"]) ? $options["htmlmessage"] : "");
-		$attachments = (isset($options["attachments"]) ? $options["attachments"] : array());
-
-		$messagetoaddr = self::EmailAddressesToEmailHeaders($toaddr, "To", true, false, $options);
-		$replytoaddr = self::EmailAddressesToEmailHeaders($replytoaddr, "Reply-To", false, false, $options);
-		if ($replytoaddr == "")  $replytoaddr = self::EmailAddressesToEmailHeaders($fromaddr, "Reply-To", false, false, $options);
-		$messagefromaddr = self::EmailAddressesToEmailHeaders($fromaddr, "From", false, false, $options);
-		if ($ccaddr != "")  $toaddr .= ", " . $ccaddr;
-		$ccaddr = self::EmailAddressesToEmailHeaders($ccaddr, "Cc", true, false, $options);
-		if ($bccaddr != "")  $toaddr .= ", " . $bccaddr;
-		$bccaddr = self::EmailAddressesToEmailHeaders($bccaddr, "Bcc", true, false, $options);
-
-		if ($htmlmessage == "" && !count($attachments))
+		public static function SendEmail($fromaddr, $toaddr, $subject, $options = array())
 		{
-			// Plain-text e-mail.
-			$destheaders = "";
-			$destheaders .= $messagefromaddr;
-			if ($headers != "")  $destheaders .= $headers;
-			$destheaders .= "MIME-Version: 1.0\r\n";
-			if (!isset($options["usemail"]) || !$options["usemail"])  $destheaders .= $messagetoaddr;
-			if ($replytoaddr != "")  $destheaders .= $replytoaddr;
-			if ($ccaddr != "")  $destheaders .= $ccaddr;
-			if ($bccaddr != "")  $destheaders .= $bccaddr;
-			if (!isset($options["usemail"]) || !$options["usemail"])  $destheaders .= "Subject: " . $subject . "\r\n";
-			$destheaders .= "Content-Type: text/plain; charset=UTF-8\r\n";
-			$destheaders .= "Content-Transfer-Encoding: quoted-printable\r\n";
+			$subject = str_replace("\r", " ", $subject);
+			$subject = str_replace("\n", " ", $subject);
+			if (!UTF8::IsASCII($subject))  $subject = self::ConvertToRFC1342($subject);
 
-			$message = self::ConvertEmailMessageToRFC1341($textmessage);
-		}
-		else
-		{
-			// MIME e-mail (HTML, text, attachments).
-			$mimeboundary = "--------" . self::MIME_RandomString(25);
-			$destheaders = "";
-			$destheaders .= $messagefromaddr;
-			if ($headers != "")  $destheaders .= $headers;
-			$destheaders .= "MIME-Version: 1.0\r\n";
-			if (!isset($options["usemail"]) || !$options["usemail"])  $destheaders .= $messagetoaddr;
-			if ($replytoaddr != "")  $destheaders .= $replytoaddr;
-			if ($ccaddr != "")  $destheaders .= $ccaddr;
-			if ($bccaddr != "")  $destheaders .= $bccaddr;
-			if (!isset($options["usemail"]) || !$options["usemail"])  $destheaders .= "Subject: " . $subject . "\r\n";
-			if (count($attachments) && isset($options["inlineattachments"]) && $options["inlineattachments"])  $destheaders .= "Content-Type: multipart/related; boundary=\"" . $mimeboundary . "\"; type=\"multipart/alternative\"\r\n";
-			else if (count($attachments))  $destheaders .= "Content-Type: multipart/mixed; boundary=\"" . $mimeboundary . "\"\r\n";
-			else if ($textmessage != "" && $htmlmessage != "")  $destheaders .= "Content-Type: multipart/alternative; boundary=\"" . $mimeboundary . "\"\r\n";
-			else  $mimeboundary = "";
+			$replytoaddr = (isset($options["replytoaddr"]) ? $options["replytoaddr"] : "");
+			$ccaddr = (isset($options["ccaddr"]) ? $options["ccaddr"] : "");
+			$bccaddr = (isset($options["bccaddr"]) ? $options["bccaddr"] : "");
+			$headers = (isset($options["headers"]) ? $options["headers"] : "");
+			$textmessage = (isset($options["textmessage"]) ? $options["textmessage"] : "");
+			$htmlmessage = (isset($options["htmlmessage"]) ? $options["htmlmessage"] : "");
+			$attachments = (isset($options["attachments"]) ? $options["attachments"] : array());
 
-			if ($mimeboundary != "")  $mimecontent = "This is a multi-part message in MIME format.\r\n";
-			else  $mimecontent = "";
+			$messagetoaddr = self::EmailAddressesToEmailHeaders($toaddr, "To", true, false, $options);
+			$replytoaddr = self::EmailAddressesToEmailHeaders($replytoaddr, "Reply-To", false, false, $options);
+			if ($replytoaddr == "")  $replytoaddr = self::EmailAddressesToEmailHeaders($fromaddr, "Reply-To", false, false, $options);
+			$messagefromaddr = self::EmailAddressesToEmailHeaders($fromaddr, "From", false, false, $options);
+			if ($messagefromaddr == "" && $replytoaddr == "")  return array("success" => false, "error" => self::SMTP_Translate("From address is invalid."), "errorcode" => "invalid_from_address", "info" => $fromaddr);
+			if ($ccaddr != "")  $toaddr .= ", " . $ccaddr;
+			$ccaddr = self::EmailAddressesToEmailHeaders($ccaddr, "Cc", true, false, $options);
+			if ($bccaddr != "")  $toaddr .= ", " . $bccaddr;
+			$bccaddr = self::EmailAddressesToEmailHeaders($bccaddr, "Bcc", true, false, $options);
 
-			if ($textmessage == "" || $htmlmessage == "" || !count($attachments))  $mimeboundary2 = $mimeboundary;
+			if ($htmlmessage == "" && !count($attachments))
+			{
+				// Plain-text e-mail.
+				$destheaders = "";
+				$destheaders .= $messagefromaddr;
+				if ($headers != "")  $destheaders .= $headers;
+				$destheaders .= "MIME-Version: 1.0\r\n";
+				if (!isset($options["usemail"]) || !$options["usemail"])  $destheaders .= $messagetoaddr;
+				if ($replytoaddr != "")  $destheaders .= $replytoaddr;
+				if ($ccaddr != "")  $destheaders .= $ccaddr;
+				if ($bccaddr != "")  $destheaders .= $bccaddr;
+				if (!isset($options["usemail"]) || !$options["usemail"])  $destheaders .= "Subject: " . $subject . "\r\n";
+				$destheaders .= "Content-Type: text/plain; charset=UTF-8\r\n";
+				$destheaders .= "Content-Transfer-Encoding: quoted-printable\r\n";
+
+				$message = self::ConvertEmailMessageToRFC1341($textmessage);
+			}
 			else
 			{
-				$mimeboundary2 = "--------" . self::MIME_RandomString(25);
-				$mimecontent .= "--" . $mimeboundary . "\r\n";
-				$mimecontent .= "Content-Type: multipart/alternative; boundary=\"" . $mimeboundary2 . "\"\r\n";
-				$mimecontent .= "\r\n";
-			}
+				// MIME e-mail (HTML, text, attachments).
+				$mimeboundary = "--------" . self::MIME_RandomString(25);
+				$destheaders = "";
+				$destheaders .= $messagefromaddr;
+				if ($headers != "")  $destheaders .= $headers;
+				$destheaders .= "MIME-Version: 1.0\r\n";
+				if (!isset($options["usemail"]) || !$options["usemail"])  $destheaders .= $messagetoaddr;
+				if ($replytoaddr != "")  $destheaders .= $replytoaddr;
+				if ($ccaddr != "")  $destheaders .= $ccaddr;
+				if ($bccaddr != "")  $destheaders .= $bccaddr;
+				if (!isset($options["usemail"]) || !$options["usemail"])  $destheaders .= "Subject: " . $subject . "\r\n";
+				if (count($attachments) && isset($options["inlineattachments"]) && $options["inlineattachments"])  $destheaders .= "Content-Type: multipart/related; boundary=\"" . $mimeboundary . "\"; type=\"multipart/alternative\"\r\n";
+				else if (count($attachments))  $destheaders .= "Content-Type: multipart/mixed; boundary=\"" . $mimeboundary . "\"\r\n";
+				else if ($textmessage != "" && $htmlmessage != "")  $destheaders .= "Content-Type: multipart/alternative; boundary=\"" . $mimeboundary . "\"\r\n";
+				else  $mimeboundary = "";
 
-			if ($textmessage != "")
-			{
-				if ($mimeboundary2 != "")
+				if ($mimeboundary != "")  $mimecontent = "This is a multi-part message in MIME format.\r\n";
+				else  $mimecontent = "";
+
+				if ($textmessage == "" || $htmlmessage == "" || !count($attachments))  $mimeboundary2 = $mimeboundary;
+				else
 				{
-					$mimecontent .= "--" . $mimeboundary2 . "\r\n";
-					$mimecontent .= "Content-Type: text/plain; charset=UTF-8\r\n";
-					$mimecontent .= "Content-Transfer-Encoding: quoted-printable\r\n";
+					$mimeboundary2 = "--------" . self::MIME_RandomString(25);
+					$mimecontent .= "--" . $mimeboundary . "\r\n";
+					$mimecontent .= "Content-Type: multipart/alternative; boundary=\"" . $mimeboundary2 . "\"\r\n";
 					$mimecontent .= "\r\n";
 				}
-				else
-				{
-					$destheaders .= "Content-Type: text/plain; charset=UTF-8\r\n";
-					$destheaders .= "Content-Transfer-Encoding: quoted-printable\r\n";
-				}
-				$message = self::ConvertEmailMessageToRFC1341($textmessage);
-				$mimecontent .= $message;
-				$mimecontent .= "\r\n";
-			}
 
-			if ($htmlmessage != "")
-			{
-				if ($mimeboundary2 != "")
+				if ($textmessage != "")
 				{
-					$mimecontent .= "--" . $mimeboundary2 . "\r\n";
-					$mimecontent .= "Content-Type: text/html; charset=UTF-8\r\n";
-					$mimecontent .= "Content-Transfer-Encoding: quoted-printable\r\n";
+					if ($mimeboundary2 != "")
+					{
+						$mimecontent .= "--" . $mimeboundary2 . "\r\n";
+						$mimecontent .= "Content-Type: text/plain; charset=UTF-8\r\n";
+						$mimecontent .= "Content-Transfer-Encoding: quoted-printable\r\n";
+						$mimecontent .= "\r\n";
+					}
+					else
+					{
+						$destheaders .= "Content-Type: text/plain; charset=UTF-8\r\n";
+						$destheaders .= "Content-Transfer-Encoding: quoted-printable\r\n";
+					}
+					$message = self::ConvertEmailMessageToRFC1341($textmessage);
+					$mimecontent .= $message;
 					$mimecontent .= "\r\n";
 				}
-				else
+
+				if ($htmlmessage != "")
 				{
-					$destheaders .= "Content-Type: text/html; charset=UTF-8\r\n";
-					$destheaders .= "Content-Transfer-Encoding: quoted-printable\r\n";
+					if ($mimeboundary2 != "")
+					{
+						$mimecontent .= "--" . $mimeboundary2 . "\r\n";
+						$mimecontent .= "Content-Type: text/html; charset=UTF-8\r\n";
+						$mimecontent .= "Content-Transfer-Encoding: quoted-printable\r\n";
+						$mimecontent .= "\r\n";
+					}
+					else
+					{
+						$destheaders .= "Content-Type: text/html; charset=UTF-8\r\n";
+						$destheaders .= "Content-Transfer-Encoding: quoted-printable\r\n";
+					}
+					$message = self::ConvertEmailMessageToRFC1341($htmlmessage);
+					$mimecontent .= $message;
+					$mimecontent .= "\r\n";
 				}
-				$message = self::ConvertEmailMessageToRFC1341($htmlmessage);
-				$mimecontent .= $message;
-				$mimecontent .= "\r\n";
+
+				if ($mimeboundary2 != "")  $mimecontent .= "--" . $mimeboundary2 . "--\r\n";
+
+				// Process the attachments.
+				$y = count($attachments);
+				for ($x = 0; $x < $y; $x++)
+				{
+					$mimecontent .= "--" . $mimeboundary . "\r\n";
+					$type = str_replace("\r", "", $attachments[$x]["type"]);
+					$type = str_replace("\n", "", $type);
+					$type = UTF8::ConvertToASCII($type);
+					if (!isset($attachments[$x]["name"]))  $name = "";
+					else
+					{
+						$name = str_replace("\r", "", $attachments[$x]["name"]);
+						$name = str_replace("\n", "", $name);
+						$name = self::FilenameSafe($name);
+					}
+
+					if (!isset($attachments[$x]["location"]))  $location = "";
+					else
+					{
+						$location = str_replace("\r", "", $attachments[$x]["location"]);
+						$location = str_replace("\n", "", $location);
+						$location = UTF8::ConvertToASCII($location);
+					}
+
+					if (!isset($attachments[$x]["cid"]))  $cid = "";
+					else
+					{
+						$cid = str_replace("\r", "", $attachments[$x]["cid"]);
+						$cid = str_replace("\n", "", $cid);
+						$cid = UTF8::ConvertToASCII($cid);
+					}
+					$mimecontent .= "Content-Type: " . $type . ($name != "" ? "; name=\"" . $name . "\"" : "") . "\r\n";
+					if ($cid != "")  $mimecontent .= "Content-ID: <" . $cid . ">\r\n";
+					if ($location != "")  $mimecontent .= "Content-Location: " . $location . "\r\n";
+					$mimecontent .= "Content-Transfer-Encoding: base64\r\n";
+					if ($name != "")  $mimecontent .= "Content-Disposition: inline; filename=\"" . $name . "\"\r\n";
+					$mimecontent .= "\r\n";
+					$mimecontent .= chunk_split(base64_encode($attachments[$x]["data"]));
+					$mimecontent .= "\r\n";
+				}
+
+				if ($mimeboundary != "")  $mimecontent .= "--" . $mimeboundary . "--\r\n";
+				$message = $mimecontent;
 			}
 
-			if ($mimeboundary2 != "")  $mimecontent .= "--" . $mimeboundary2 . "--\r\n";
-
-			// Process the attachments.
-			$y = count($attachments);
-			for ($x = 0; $x < $y; $x++)
+			if (isset($options["returnresults"]) && $options["returnresults"])  return array("success" => true, "toaddr" => $toaddr, "fromaddr" => $fromaddr, "headers" => $destheaders, "subject" => $subject, "message" => $message);
+			else if (isset($options["usemail"]) && $options["usemail"])
 			{
-				$mimecontent .= "--" . $mimeboundary . "\r\n";
-				$type = str_replace("\r", "", $attachments[$x]["type"]);
-				$type = str_replace("\n", "", $type);
-				$type = UTF8::ConvertToASCII($type);
-				if (!isset($attachments[$x]["name"]))  $name = "";
-				else
-				{
-					$name = str_replace("\r", "", $attachments[$x]["name"]);
-					$name = str_replace("\n", "", $name);
-					$name = self::FilenameSafe($name);
-				}
+				$result = mail($toaddr, $subject, self::ReplaceNewlines("\n", $message), $destheaders);
+				if (!$result)  return array("success" => false, "error" => self::SMTP_Translate("PHP mail() call failed."), "errorcode" => "mail_call_failed");
 
-				if (!isset($attachments[$x]["location"]))  $location = "";
-				else
-				{
-					$location = str_replace("\r", "", $attachments[$x]["location"]);
-					$location = str_replace("\n", "", $location);
-					$location = UTF8::ConvertToASCII($location);
-				}
-
-				if (!isset($attachments[$x]["cid"]))  $cid = "";
-				else
-				{
-					$cid = str_replace("\r", "", $attachments[$x]["cid"]);
-					$cid = str_replace("\n", "", $cid);
-					$cid = UTF8::ConvertToASCII($cid);
-				}
-				$mimecontent .= "Content-Type: " . $type . ($name != "" ? "; name=\"" . $name . "\"" : "") . "\r\n";
-				if ($cid != "")  $mimecontent .= "Content-ID: <" . $cid . ">\r\n";
-				if ($location != "")  $mimecontent .= "Content-Location: " . $location . "\r\n";
-				$mimecontent .= "Content-Transfer-Encoding: base64\r\n";
-				if ($name != "")  $mimecontent .= "Content-Disposition: inline; filename=\"" . $name . "\"\r\n";
-				$mimecontent .= "\r\n";
-				$mimecontent .= chunk_split(base64_encode($attachments[$x]["data"]));
-				$mimecontent .= "\r\n";
+				return array("success" => true);
 			}
-
-			if ($mimeboundary != "")  $mimecontent .= "--" . $mimeboundary . "--\r\n";
-			$message = $mimecontent;
+			else
+			{
+				return self::SendSMTPEmail($toaddr, $fromaddr, $destheaders . "\r\n" . $message, $options);
+			}
 		}
-
-		if (isset($options["returnresults"]) && $options["returnresults"])  return array("toaddr" => $toaddr, "fromaddr" => $fromaddr, "headers" => $destheaders, "subject" => $subject, "message" => $message);
-		else if (isset($options["usemail"]) && $options["usemail"])  return mail($toaddr, $subject, self::ReplaceNewlines("\n", $message), $destheaders);
-		else  return self::SendSMTPEmail($toaddr, $fromaddr, $destheaders . "\r\n" . $message, $options);
 	}
 ?>

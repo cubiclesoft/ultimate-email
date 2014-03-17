@@ -1,0 +1,15 @@
+<html><body>
+Once upon a time, there was this crazy guy named Thomas.<br />
+And he ran a crazy company called CubicleSoft.<br />
+<br />
+He wrote a library that did e-mail that actually worked.<br />
+In PHP.<br />
+<br />
+It was awesome.<br />
+Eventually people decided it was so awesome, they parted with some money.<br />
+<br />
+Thomas loves your money.<br />
+Don't forget to donate.<br />
+<br />
+<a href="http://barebonescms.com/donate/">http://barebonescms.com/donate/</a><br />
+</body></html>
