@@ -1,6 +1,6 @@
 <?php
 	// CubicleSoft PHP POP3 class.
-	// (C) 2011 CubicleSoft.  All Rights Reserved.
+	// (C) 2014 CubicleSoft.  All Rights Reserved.
 
 	class POP3
 	{
