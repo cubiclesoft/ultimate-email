@@ -577,7 +577,7 @@
 								break;
 							}
 							else if ($lastchr == "," || $lastchr == ".")  $email .= ".";
-							else if (preg_match('/[A-Za-z0-9]/', $lastchr))  $email .= $lastchr;
+							else if (preg_match('/[A-Za-z0-9-]/', $lastchr))  $email .= $lastchr;
 
 							$data = trim(substr($data, 0, -1));
 

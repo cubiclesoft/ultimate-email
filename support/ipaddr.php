@@ -20,7 +20,7 @@
 			{
 				$segment = trim($segment);
 				if ($segment != "")  $ipaddr2[] = $segment;
-				else if ($foundpos === false && count($ipaddr) > $num + 1 && $ipaddr[$num + 1])
+				else if ($foundpos === false && count($ipaddr) > $num + 1 && $ipaddr[$num + 1] != "")
 				{
 					$foundpos = count($ipaddr2);
 					$ipaddr2[] = "0000";
@@ -60,7 +60,7 @@
 			{
 				$shortipv6 = str_replace($pattern, ":", $shortipv6);
 				$pattern = substr($pattern, 5);
-			} while (strlen($shortipv6) == 39);
+			} while (strlen($shortipv6) == 39 && $pattern != "");
 			$shortipv6 = explode(":", $shortipv6);
 			foreach ($shortipv6 as $num => $segment)
 			{
