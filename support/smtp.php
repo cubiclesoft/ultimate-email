@@ -1412,7 +1412,7 @@
 					$mimecontent .= "\r\n";
 				}
 
-				if ($mimeboundary2 != "")  $mimecontent .= "--" . $mimeboundary2 . "--\r\n";
+				if ($mimeboundary2 != "" && $mimeboundary != $mimeboundary2)  $mimecontent .= "--" . $mimeboundary2 . "--\r\n";
 
 				// Process the attachments.
 				$y = count($attachments);
