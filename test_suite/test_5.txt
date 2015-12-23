@@ -15,8 +15,7 @@ In PHP.</p>
 <p>It was awesome.<br />
 Eventually people decided it was so awesome, they parted with some money.</p>
 
-<p>Thomas loves your money.<br />
-Don't forget to donate.</p>
+<p>Don't forget to donate.</p>
 
 <p><a href="http://barebonescms.com/donate/">http://barebonescms.com/donate/</a></p>
 </tr></td></table>

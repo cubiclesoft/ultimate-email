@@ -1,0 +1,102 @@
+<html>
+<head>
+<style type="text/css">
+body { margin: 0; }
+</style>
+<title>Booya!</title>
+<body>
+</div>
+<div class="test">
+<p>Hello,</p>
+
+
+<pre>
+
+  ***********
+  * Awesome *
+  *  Text   *
+  ***********
+
+</pre>
+
+<h1>Header 1</h1>
+<h2>Header 2</h2>
+<h3>Header 3</h3>
+<h4>Header 4</h4>
+<h5>Header 5</h5>
+<h6>Header 6</h6>
+
+<table>
+<tr>
+	<th class="col">Table Header 1</th><th>Table Header 2</th>
+</tr>
+<tr>
+	<td class="col">R1, C1
+    <td>R1, C2
+
+<tr>
+	<td class="col">R2, C1</td><td>R2, C2</td>
+</tr>
+</table>
+
+<strong><b><i><sup></sup></i></b></strong>
+
+<p>Test.  <a href="https://www.google.com/"><i>Italicz!</i></a></p>
+<p><a href="">Should not show!</a></p>
+<p><a href="https://www.should-not-show-either.com/"></a></p>
+
+<!--
+	Should not show this comment but should show the hyperlink in brackets:  [ https://www.google.com/ ]
+-->
+<p><a href="https://www.google.com/">https://www.google.com/</a></p>
+
+<script type="text/javascript">
+pwned();
+</script>
+
+<ul>
+	<li>List element 1
+		<ol><li>List element 1.1</li>
+		<li>List element 1.2
+			<ul><li>List element 1.2.a</li>
+			<li>List element 1.2.b<br />Description line 2
+			<li>List element 1.2.c</li></ul>
+		<li>List element 1.3</li></ol>
+
+	<li>List element 2
+	<li>List element 3
+	<li>List element 4
+</ul>
+
+<blockquote>
+Blah d blah d blah!
+
+Har har har.
+</blockquote>
+
+<img src="https://www.somewhere.com/awesome.jpg" alt   =             "This is awesome!" />
+
+
+
+
+
+
+Hello.
+
+
+
+
+
+
+<p><b>
+Some
+Company</b><br />123
+Test
+Street<br />
+Somewhere,
+NY
+12345</p>
+
+
+</body>
+</html>

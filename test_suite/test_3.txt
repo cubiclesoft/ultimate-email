@@ -8,7 +8,6 @@ In PHP.<br />
 It was awesome.<br />
 Eventually people decided it was so awesome, they parted with some money.<br />
 <br />
-Thomas loves your money.<br />
 Don't forget to donate.<br />
 <br />
 <a href="http://barebonescms.com/donate/">http://barebonescms.com/donate/</a><br />
