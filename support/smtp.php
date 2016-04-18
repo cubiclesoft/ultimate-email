@@ -402,13 +402,13 @@
 
 			// Process results.
 			if (substr($domain, 0, 1) == "[" && substr($domain, -1) == "]")  $result = array("success" => true, "email" => $email, "lookup" => false, "type" => "IP");
-			else if (isset($options["usedns"]) && $options["usedns"] === false)  $result = array("success" => true, "email" => $email, "lookup" => false, "type" => "Domain");
-			else if ((!isset($options["usednsttlcache"]) || $options["usednsttlcache"] === true) && isset(self::$dnsttlcache[$domain]) && self::$dnsttlcache[$domain] >= time())  $result = array("success" => true, "email" => $email, "lookup" => false, "type" => "CachedDNS");
+			else if (isset($options["usedns"]) && $options["usedns"] === false)  $result = array("success" => true, "email" => $email, "lookup" => false, "type" => "Domain", "domain" => $domain);
+			else if ((!isset($options["usednsttlcache"]) || $options["usednsttlcache"] === true) && isset(self::$dnsttlcache[$domain]) && self::$dnsttlcache[$domain] >= time())  $result = array("success" => true, "email" => $email, "lookup" => false, "type" => "CachedDNS", "domain" => $domain);
 			else
 			{
 				// Check for a mail server based on a DNS lookup.
 				$result = self::GetDNSRecord($domain, array("MX", "A"), (isset($options["nameservers"]) ? $options["nameservers"] : array("8.8.8.8", "8.8.4.4")), (!isset($options["usednsttlcache"]) || $options["usednsttlcache"] === true));
-				if ($result["success"])  $result = array("success" => true, "email" => $email, "lookup" => true, "type" => $result["type"], "records" => $result["records"]);
+				if ($result["success"])  $result = array("success" => true, "email" => $email, "lookup" => true, "type" => $result["type"], "domain" => $domain, "records" => $result["records"]);
 			}
 
 			return $result;
@@ -819,15 +819,17 @@
 			while (strpos($state["data"], "\n") === false)
 			{
 				$data2 = @fgets($state["fp"], 116000);
-				if ($data2 === false)  return array("success" => false, "error" => self::SMTP_Translate("Underlying stream encountered a read error."), "errorcode" => "stream_read_error");
-				if (strpos($data2, "\n") === false)
+				if ($data2 === false || $data2 === "")
+				{
+					if ($state["async"])  return array("success" => false, "error" => self::SMTP_Translate("Non-blocking read returned no data."), "errorcode" => "no_data");
+					else if ($data2 === false)  return array("success" => false, "error" => self::SMTP_Translate("Underlying stream encountered a read error."), "errorcode" => "stream_read_error");
+				}
+				if ($data2 === false || strpos($data2, "\n") === false)
 				{
 					if (feof($state["fp"]))  return array("success" => false, "error" => self::SMTP_Translate("Remote peer disconnected."), "errorcode" => "peer_disconnected");
 					if (self::StreamTimedOut($state["fp"]))  return array("success" => false, "error" => self::SMTP_Translate("Underlying stream timed out."), "errorcode" => "stream_timeout_exceeded");
-
-					if ($state["async"] && $data2 === "")  return array("success" => false, "error" => self::SMTP_Translate("Non-blocking read returned no data."), "errorcode" => "no_data");
 				}
-				if ($state["timeout"] !== false && self::GetTimeLeft($state["startts"], $state["timeout"]) == 0)  return array("success" => false, "error" => self::SMTP_Translate("HTTP timeout exceeded."), "errorcode" => "timeout_exceeded");
+				if ($state["timeout"] !== false && self::GetTimeLeft($state["startts"], $state["timeout"]) == 0)  return array("success" => false, "error" => self::SMTP_Translate("SMTP timeout exceeded."), "errorcode" => "timeout_exceeded");
 
 				$state["result"]["rawrecvsize"] += strlen($data2);
 				$state["data"] .= $data2;
@@ -848,7 +850,7 @@
 			{
 				$result = @fwrite($state["fp"], $state["data"]);
 				if ($result === false || feof($state["fp"]))  return array("success" => false, "error" => self::SMTP_Translate("A fwrite() failure occurred.  Most likely cause:  Connection failure."), "errorcode" => "fwrite_failed");
-				if ($state["timeout"] !== false && self::GetTimeLeft($state["startts"], $state["timeout"]) == 0)  return array("success" => false, "error" => self::SMTP_Translate("HTTP timeout exceeded."), "errorcode" => "timeout_exceeded");
+				if ($state["timeout"] !== false && self::GetTimeLeft($state["startts"], $state["timeout"]) == 0)  return array("success" => false, "error" => self::SMTP_Translate("SMTP timeout exceeded."), "errorcode" => "timeout_exceeded");
 
 				$data2 = substr($state["data"], 0, $result);
 				$state["data"] = (string)substr($state["data"], $result);
@@ -904,11 +906,21 @@
 			$state["expectederror"] = $expectederror;
 		}
 
+		public static function WantRead(&$state)
+		{
+			return ($state["state"] === "get_response");
+		}
+
+		public static function WantWrite(&$state)
+		{
+			return !self::WantRead($state);
+		}
+
 		public static function ProcessState(&$state)
 		{
 			if (isset($state["error"]))  return $state["error"];
 
-			if ($state["timeout"] !== false && self::GetTimeLeft($state["startts"], $state["timeout"]) == 0)  return self::CleanupErrorState($state, array("success" => false, "error" => self::SMTP_Translate("HTTP timeout exceeded."), "errorcode" => "timeout_exceeded"));
+			if ($state["timeout"] !== false && self::GetTimeLeft($state["startts"], $state["timeout"]) == 0)  return self::CleanupErrorState($state, array("success" => false, "error" => self::SMTP_Translate("SMTP timeout exceeded."), "errorcode" => "timeout_exceeded"));
 			if (microtime(true) < $state["waituntil"])  return array("success" => false, "error" => self::SMTP_Translate("Rate limit for non-blocking connection has not been reached."), "errorcode" => "no_data");
 
 			while ($state["state"] !== "done")
@@ -1165,7 +1177,7 @@
 				$result["rawrecv"] = "";
 			}
 
-			if ($timeout !== false && self::GetTimeLeft($startts, $timeout) == 0)  return array("success" => false, "error" => self::SMTP_Translate("HTTP timeout exceeded."), "errorcode" => "timeout_exceeded");
+			if ($timeout !== false && self::GetTimeLeft($startts, $timeout) == 0)  return array("success" => false, "error" => self::SMTP_Translate("SMTP timeout exceeded."), "errorcode" => "timeout_exceeded");
 
 			// Connect to the target server.
 			$hostname = (isset($options["hostname"]) ? $options["hostname"] : "[" . trim(isset($_SERVER["SERVER_ADDR"]) && $_SERVER["SERVER_ADDR"] != "127.0.0.1" ? $_SERVER["SERVER_ADDR"] : "192.168.0.101") . "]");
@@ -1344,6 +1356,105 @@
 			}
 
 			return $result;
+		}
+
+		// Implements the correct MultiAsyncHelper responses for SMTP.
+		public static function SendEmailAsync__Handler($mode, &$data, $key, &$info)
+		{
+			switch ($mode)
+			{
+				case "init":
+				{
+					if ($info["init"])  $data = $info["keep"];
+					else
+					{
+						$info["result"] = self::SendEmail($info["fromaddr"], $info["toaddr"], $info["subject"], $info["options"]);
+						if (!$info["result"]["success"])
+						{
+							$info["keep"] = false;
+
+							if (is_callable($info["callback"]))  call_user_func_array($info["callback"], array($key, $info["url"], $info["result"]));
+						}
+						else
+						{
+							$info["state"] = $info["result"]["state"];
+
+							// Move to the live queue.
+							$data = true;
+						}
+					}
+
+					break;
+				}
+				case "update":
+				case "read":
+				case "write":
+				{
+					if ($info["keep"])
+					{
+						$info["result"] = self::ProcessState($info["state"]);
+						if ($info["result"]["success"] || $info["result"]["errorcode"] !== "no_data")  $info["keep"] = false;
+
+						if (is_callable($info["callback"]))  call_user_func_array($info["callback"], array($key, $info["url"], $info["result"]));
+
+						if ($mode === "update")  $data = $info["keep"];
+					}
+
+					break;
+				}
+				case "readfps":
+				{
+					if ($info["state"] !== false && self::WantRead($info["state"]))  $data[$key] = $info["state"]["fp"];
+
+					break;
+				}
+				case "writefps":
+				{
+					if ($info["state"] !== false && self::WantWrite($info["state"]))  $data[$key] = $info["state"]["fp"];
+
+					break;
+				}
+				case "cleanup":
+				{
+					// When true, caller is removing.  Otherwise, detaching from the queue.
+					if ($data === true)
+					{
+						if (isset($info["state"]))
+						{
+							if ($info["state"] !== false)  self::ForceClose($info["state"]);
+
+							unset($info["state"]);
+						}
+
+						$info["keep"] = false;
+					}
+
+					break;
+				}
+			}
+		}
+
+		public static function SendEmailAsync($helper, $key, $callback, $fromaddr, $toaddr, $subject, $options = array())
+		{
+			$options["async"] = true;
+
+			// DNS lookups are synchronous.  Disable this until it is possible to deal with them.
+			$options["usedns"] = false;
+
+			$info = array(
+				"init" => false,
+				"keep" => true,
+				"callback" => $callback,
+				"fromaddr" => $fromaddr,
+				"toaddr" => $toaddr,
+				"subject" => $subject,
+				"options" => $options,
+				"result" => false
+			);
+
+			$helper->Set($key, $info, array(__CLASS__, "SendEmailAsync__Handler"));
+
+			return array("success" => true);
 		}
 
 		public static function SendEmail($fromaddr, $toaddr, $subject, $options = array())
