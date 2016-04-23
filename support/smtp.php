@@ -3,8 +3,8 @@
 	// (C) 2014 CubicleSoft.  All Rights Reserved.
 
 	// Load dependencies.
-	if (!class_exists("UTF8"))  require_once str_replace("\\", "/", dirname(__FILE__)) . "/utf8.php";
-	if (!class_exists("IPAddr"))  require_once str_replace("\\", "/", dirname(__FILE__)) . "/ipaddr.php";
+	if (!class_exists("UTF8", false))  require_once str_replace("\\", "/", dirname(__FILE__)) . "/utf8.php";
+	if (!class_exists("IPAddr", false))  require_once str_replace("\\", "/", dirname(__FILE__)) . "/ipaddr.php";
 
 	class SMTP
 	{
@@ -426,7 +426,7 @@
 		public static function GetDNSRecord($domain, $types = array("MX", "A"), $nameservers = array("8.8.8.8", "8.8.4.4"), $cache = true)
 		{
 			// Check for a mail server based on a DNS lookup.
-			if (!class_exists("Net_DNS2_Resolver"))  require_once str_replace("\\", "/", dirname(__FILE__)) . "/Net/DNS2.php";
+			if (!class_exists("Net_DNS2_Resolver", false))  require_once str_replace("\\", "/", dirname(__FILE__)) . "/Net/DNS2.php";
 
 			$resolver = new Net_DNS2_Resolver(array("nameservers" => $nameservers));
 			try
@@ -1326,7 +1326,7 @@
 			self::$depths = array();
 
 			// Load TagFilter.
-			if (!class_exists("TagFilter"))  require_once str_replace("\\", "/", dirname(__FILE__)) . "/tag_filter.php";
+			if (!class_exists("TagFilter", false))  require_once str_replace("\\", "/", dirname(__FILE__)) . "/tag_filter.php";
 
 			$data = UTF8::MakeValid($data);
 
