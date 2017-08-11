@@ -1472,8 +1472,8 @@
 			$attachments = (isset($options["attachments"]) ? $options["attachments"] : array());
 
 			$messagetoaddr = self::EmailAddressesToEmailHeaders($toaddr, "To", true, false, $options);
-			$replytoaddr = self::EmailAddressesToEmailHeaders($replytoaddr, "Reply-To", false, false, $options);
-			if ($replytoaddr == "")  $replytoaddr = self::EmailAddressesToEmailHeaders($fromaddr, "Reply-To", false, false, $options);
+			$replytoaddr = self::EmailAddressesToEmailHeaders($replytoaddr, "Reply-To", true, false, $options);
+			if ($replytoaddr == "")  $replytoaddr = self::EmailAddressesToEmailHeaders($fromaddr, "Reply-To", true, false, $options);
 			$messagefromaddr = self::EmailAddressesToEmailHeaders($fromaddr, "From", false, false, $options);
 			if ($messagefromaddr == "" && $replytoaddr == "")  return array("success" => false, "error" => self::SMTP_Translate("From address is invalid."), "errorcode" => "invalid_from_address", "info" => $fromaddr);
 			if ($ccaddr != "")  $toaddr .= ", " . $ccaddr;
