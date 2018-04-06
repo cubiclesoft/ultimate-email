@@ -1,6 +1,6 @@
 <?php
 	// CubicleSoft PHP SMTP e-mail functions.
-	// (C) 2014 CubicleSoft.  All Rights Reserved.
+	// (C) 2018 CubicleSoft.  All Rights Reserved.
 
 	// Load dependencies.
 	if (!class_exists("UTF8", false))  require_once str_replace("\\", "/", dirname(__FILE__)) . "/utf8.php";
@@ -9,12 +9,12 @@
 	class SMTP
 	{
 		public static $dnsttlcache = array();
-		private static $depths = array(), $purifier = false, $html = false;
+		private static $depths = array();
 
 		// Reduce dependencies.  Duplicates code though.
 		private static function FilenameSafe($filename)
 		{
-			return preg_replace('/[_]+/', "_", preg_replace('/[^A-Za-z0-9_.\-]/', "_", $filename));
+			return preg_replace('/\s+/', "-", trim(trim(preg_replace('/[^A-Za-z0-9_.\-]/', " ", $filename), ".")));
 		}
 
 		private static function ReplaceNewlines($replacewith, $data)
@@ -821,19 +821,25 @@
 				$data2 = @fgets($state["fp"], 116000);
 				if ($data2 === false || $data2 === "")
 				{
-					if ($state["async"])  return array("success" => false, "error" => self::SMTP_Translate("Non-blocking read returned no data."), "errorcode" => "no_data");
+					if (feof($state["fp"]))  return array("success" => false, "error" => self::SMTP_Translate("Remote peer disconnected."), "errorcode" => "peer_disconnected");
+					else if ($state["async"])  return array("success" => false, "error" => self::SMTP_Translate("Non-blocking read returned no data."), "errorcode" => "no_data");
 					else if ($data2 === false)  return array("success" => false, "error" => self::SMTP_Translate("Underlying stream encountered a read error."), "errorcode" => "stream_read_error");
 				}
-				if ($data2 === false || strpos($data2, "\n") === false)
+				$pos = strpos($data2, "\n");
+				if ($pos === false)
 				{
 					if (feof($state["fp"]))  return array("success" => false, "error" => self::SMTP_Translate("Remote peer disconnected."), "errorcode" => "peer_disconnected");
 					if (self::StreamTimedOut($state["fp"]))  return array("success" => false, "error" => self::SMTP_Translate("Underlying stream timed out."), "errorcode" => "stream_timeout_exceeded");
+
+					$pos = strlen($data2);
 				}
 				if ($state["timeout"] !== false && self::GetTimeLeft($state["startts"], $state["timeout"]) == 0)  return array("success" => false, "error" => self::SMTP_Translate("SMTP timeout exceeded."), "errorcode" => "timeout_exceeded");
+				if (isset($state["options"]["readlinelimit"]) && strlen($state["data"]) + $pos > $state["options"]["readlinelimit"])  return array("success" => false, "error" => self::SMTP_Translate("Read line exceeded limit."), "errorcode" => "read_line_limit_exceeded");
 
 				$state["result"]["rawrecvsize"] += strlen($data2);
 				$state["data"] .= $data2;
 
+				if (isset($state["options"]["recvlimit"]) && $state["options"]["recvlimit"] < $state["rawsize"])  return array("success" => false, "error" => self::SMTP_Translate("Received data exceeded limit."), "errorcode" => "receive_limit_exceeded");
 				if (isset($state["options"]["recvratelimit"]))  $state["waituntil"] = self::ProcessRateLimit($state["rawsize"], $state["recvstart"], $state["options"]["recvratelimit"], $state["async"]);
 
 				if (isset($state["options"]["debug_callback"]) && is_callable($state["options"]["debug_callback"]))  call_user_func_array($state["options"]["debug_callback"], array("rawrecv", $data2, &$state["options"]["debug_callback_opts"]));
@@ -856,6 +862,7 @@
 				$state["data"] = (string)substr($state["data"], $result);
 
 				$state["result"]["rawsendsize"] += $result;
+				$state["result"]["rawsendheadersize"] += $result;
 
 				if (isset($state["options"]["sendratelimit"]))
 				{
@@ -865,6 +872,8 @@
 
 				if (isset($state["options"]["debug_callback"]) && is_callable($state["options"]["debug_callback"]))  call_user_func_array($state["options"]["debug_callback"], array("rawsend", $data2, &$state["options"]["debug_callback_opts"]));
 				else if ($state["debug"])  $state["result"]["rawsend"] .= $data2;
+
+				if ($state["async"] && strlen($state["data"]))  return array("success" => false, "error" => self::SMTP_Translate("Non-blocking write did not send all data."), "errorcode" => "no_data");
 			}
 
 			return array("success" => true);
@@ -1113,6 +1122,34 @@
 			return $result;
 		}
 
+		public static function GetSSLCiphers($type = "intermediate")
+		{
+			$type = strtolower($type);
+
+			// Cipher list last updated May 3, 2017.
+			if ($type == "modern")  return "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256";
+			else if ($type == "old")  return "ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:AES:DES-CBC3-SHA:HIGH:SEED:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!RSAPSK:!aDH:!aECDH:!EDH-DSS-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA:!SRP";
+
+			return "ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:DES-CBC3-SHA:!DSS";
+		}
+
+		public static function GetSafeSSLOpts($cafile = true, $cipherstype = "intermediate")
+		{
+			// Result array last updated May 3, 2017.
+			$result = array(
+				"ciphers" => self::GetSSLCiphers($cipherstype),
+				"disable_compression" => true,
+				"allow_self_signed" => false,
+				"verify_peer" => true,
+				"verify_depth" => 5
+			);
+
+			if ($cafile === true)  $result["auto_cainfo"] = true;
+			else if ($cafile !== false)  $result["cafile"] = $cafile;
+
+			return $result;
+		}
+
 		private static function ProcessSSLOptions(&$options, $key, $host)
 		{
 			if (isset($options[$key]["auto_cainfo"]))
@@ -1156,7 +1193,10 @@
 			if (!self::EmailAddressesToNamesAndEmail($tempfromnames, $tempfromaddrs, $fromaddr, true, $options))  return array("success" => false, "error" => self::SMTP_Translate("Invalid 'From' e-mail address."), "errorcode" => "invalid_from_address", "info" => $fromaddr);
 
 			$server = (isset($options["server"]) ? $options["server"] : "localhost");
+			if ($server == "")  return array("success" => false, "error" => self::SMTP_Translate("Invalid server specified."), "errorcode" => "invalid_server");
 			$secure = (isset($options["secure"]) ? $options["secure"] : false);
+			$protocol = ($secure ? (isset($options["protocol"]) ? strtolower($options["protocol"]) : "ssl") : "tcp");
+			if (function_exists("stream_get_transports") && !in_array($protocol, stream_get_transports()))  return array("success" => false, "error" => self::SMTP_Translate("The desired transport protocol '%s' is not installed.", $protocol), "errorcode" => "transport_not_installed");
 			$port = (isset($options["port"]) ? (int)$options["port"] : -1);
 			if ($port < 0 || $port > 65535)  $port = ($secure ? 465 : 25);
 			$debug = (isset($options["debug"]) ? $options["debug"] : false);
@@ -1193,20 +1233,21 @@
 				if (!isset($options["connecttimeout"]))  $options["connecttimeout"] = 10;
 				$timeleft = self::GetTimeLeft($startts, $timeout);
 				if ($timeleft !== false)  $options["connecttimeout"] = min($options["connecttimeout"], $timeleft);
-				if (!function_exists("stream_socket_client"))  $fp = @fsockopen(($secure ? "tls://" : "") . $server, $port, $errornum, $errorstr, $options["connecttimeout"]);
+				if (!function_exists("stream_socket_client"))  $fp = @fsockopen($protocol . "://" . $server, $port, $errornum, $errorstr, $options["connecttimeout"]);
 				else
 				{
 					$context = @stream_context_create();
 					if (isset($options["source_ip"]))  $context["socket"] = array("bindto" => $options["source_ip"] . ":0");
-					if ($secure && isset($options["sslopts"]) && is_array($options["sslopts"]))
+					if ($secure)
 					{
+						if (!isset($options["sslopts"]) || !is_array($options["sslopts"]))  $options["sslopts"] = self::GetSafeSSLOpts();
 						self::ProcessSSLOptions($options, "sslopts", $server);
 						foreach ($options["sslopts"] as $key => $val)  @stream_context_set_option($context, "ssl", $key, $val);
 					}
-					$fp = @stream_socket_client(($secure ? "tls://" : "") . $server . ":" . $port, $errornum, $errorstr, $options["connecttimeout"], STREAM_CLIENT_CONNECT | (isset($options["async"]) && $options["async"] ? STREAM_CLIENT_ASYNC_CONNECT : 0), $context);
+					$fp = @stream_socket_client($protocol . "://" . $server . ":" . $port, $errornum, $errorstr, $options["connecttimeout"], STREAM_CLIENT_CONNECT | (isset($options["async"]) && $options["async"] ? STREAM_CLIENT_ASYNC_CONNECT : 0), $context);
 				}
 
-				if ($fp === false)  return array("success" => false, "error" => self::SMTP_Translate("Unable to establish a SMTP connection to '%s'.", ($secure ? "tls://" : "") . $server . ":" . $port), "errorcode" => "connection_failure", "info" => $errorstr . " (" . $errornum . ")");
+				if ($fp === false)  return array("success" => false, "error" => self::SMTP_Translate("Unable to establish a SMTP connection to '%s'.", $protocol . "://" . $server . ":" . $port), "errorcode" => "connection_failure", "info" => $errorstr . " (" . $errornum . ")");
 			}
 
 			if (function_exists("stream_set_blocking"))  @stream_set_blocking($fp, (isset($options["async"]) && $options["async"] ? 0 : 1));
@@ -1243,7 +1284,7 @@
 		}
 
 		// Has to be public so that TagFilter can successfully call.
-		public static function SMTP_HTMLTagFilter($stack, &$content, $open, $tagname, &$attrs, $options)
+		public static function ConvertHTMLToText_TagCallback($stack, &$content, $open, $tagname, &$attrs, $options)
 		{
 			$content = str_replace(array("&nbsp;", "&#160;", "\xC2\xA0"), array(" ", " ", " "), $content);
 			$content = str_replace("&amp;", "&", $content);
@@ -1312,7 +1353,7 @@
 		}
 
 		// Has to be public so that TagFilter can successfully call.
-		public static function SMTP_HTMLContentFilter($stack, $result, &$content, $options)
+		public static function ConvertHTMLToText_ContentCallback($stack, $result, &$content, $options)
 		{
 			if (TagFilter::GetParentPos($stack, "pre") === false)
 			{
@@ -1331,8 +1372,8 @@
 			$data = UTF8::MakeValid($data);
 
 			$options = TagFilter::GetHTMLOptions();
-			$options["tag_callback"] = "SMTP::SMTP_HTMLTagFilter";
-			$options["content_callback"] = "SMTP::SMTP_HTMLContentFilter";
+			$options["tag_callback"] = __CLASS__ . "::ConvertHTMLToText_TagCallback";
+			$options["content_callback"] = __CLASS__ . "::ConvertHTMLToText_ContentCallback";
 
 			$data = TagFilter::Run($data, $options);
 
