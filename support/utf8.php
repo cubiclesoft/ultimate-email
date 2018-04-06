@@ -246,10 +246,10 @@
 		// Converts UTF8 characters in a string to HTML entities.
 		public static function ConvertToHTML($data)
 		{
-			return preg_replace_callback('/([\xC0-\xF7]{1,1}[\x80-\xBF]+)/', 'UTF8::ConvertToHTML__Callback', $data);
+			return preg_replace_callback('/([\xC0-\xF7]{1,1}[\x80-\xBF]+)/', __CLASS__ . '::ConvertToHTML__Callback', $data);
 		}
 
-		private static function ConvertToHTML__Callback($data)
+		protected static function ConvertToHTML__Callback($data)
 		{
 			$data = $data[1];
 			$num = 0;
