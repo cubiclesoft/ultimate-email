@@ -19,3 +19,7 @@ Usage
 -----
 
 Documentation and examples can be found in the 'docs' directory of this repository.
+
+* [SMTP class](https://github.com/cubiclesoft/ultimate-email/blob/master/docs/smtp.md) - Send e-mail.
+* [POP3 class](https://github.com/cubiclesoft/ultimate-email/blob/master/docs/pop3.md) - Retrieve e-mail.
+* [MIMEParser class](https://github.com/cubiclesoft/ultimate-email/blob/master/docs/mime_parser.md) - Extract content from retrieved e-mail.

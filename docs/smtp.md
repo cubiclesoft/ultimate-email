@@ -1,7 +1,7 @@
 SMTP Class:  'support/smtp.php'
 ===============================
 
-The SMTP class mail sending functionality and e-mail address correction routines.  The mail sending functions directly connect to a SMTP/ESMTP server (or use mail()) to send an e-mail and offer more functionality and flexibility than the built-in PHP mail() function.
+The SMTP class contains mail sending functionality, content cleanup, and e-mail address correction routines.  The mail sending functions directly connect to a SMTP/ESMTP server (or use mail()) to send an e-mail and offer more functionality and flexibility than the built-in PHP mail() function.
 
 I'm not responsible with what you choose to do with these functions.  These are incredibly powerful PHP routines that go far beyond what PHP mail() calls typically do.  It is easy to create e-mails that look exactly like they came from a real e-mail client and will tend to get through spam filters.
 
