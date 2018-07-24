@@ -599,6 +599,7 @@
 							if (!isset($funcresult["keep_interior"]))  $funcresult["keep_interior"] = true;
 							if (!isset($funcresult["pre_tag"]))  $funcresult["pre_tag"] = "";
 							if (!isset($funcresult["post_tag"]))  $funcresult["post_tag"] = "";
+							if (!isset($funcresult["state"]))  $funcresult["state"] = false;
 						}
 
 						if ($open && $funcresult["keep_tag"])
@@ -626,7 +627,7 @@
 
 							if (!isset($this->options["void_tags"][$tagname]) && $prefix === "")
 							{
-								array_unshift($this->stack, array("tag_num" => $this->options["tag_num"], "tag_name" => $tagname, "out_tag_name" => $outtagname, "attrs" => $attrs, "result" => $result, "open_tag" => $opentag, "close_tag" => true, "keep_interior" => $funcresult["keep_interior"], "post_tag" => $funcresult["post_tag"]));
+								array_unshift($this->stack, array("tag_num" => $this->options["tag_num"], "tag_name" => $tagname, "out_tag_name" => $outtagname, "attrs" => $attrs, "result" => $result, "open_tag" => $opentag, "close_tag" => true, "keep_interior" => $funcresult["keep_interior"], "post_tag" => $funcresult["post_tag"], "state" => $funcresult["state"]));
 								$result = "";
 
 								if ($voidtag)  $open = false;
@@ -642,7 +643,7 @@
 						{
 							if ($open)
 							{
-								array_unshift($this->stack, array("tag_num" => $this->options["tag_num"], "tag_name" => $tagname, "out_tag_name" => $outtagname, "attrs" => $attrs, "result" => $result, "open_tag" => "", "close_tag" => false, "keep_interior" => $funcresult["keep_interior"], "post_tag" => $funcresult["post_tag"]));
+								array_unshift($this->stack, array("tag_num" => $this->options["tag_num"], "tag_name" => $tagname, "out_tag_name" => $outtagname, "attrs" => $attrs, "result" => $result, "open_tag" => "", "close_tag" => false, "keep_interior" => $funcresult["keep_interior"], "post_tag" => $funcresult["post_tag"], "state" => $funcresult["state"]));
 								$result = "";
 							}
 
@@ -1652,6 +1653,8 @@
 			if (!isset($options["output_mode"]))  $options["output_mode"] = "html";
 			if (!isset($options["post_elements"]))  $options["post_elements"] = array();
 			if (!isset($options["no_content_elements"]))  $options["no_content_elements"] = array("script" => true, "style" => true);
+			if (!isset($options["charset"]))  $options["charset"] = "UTF-8";
+			$options["charset"] = strtoupper($options["charset"]);
 
 			$types2 = explode(",", $options["types"]);
 			$types = array();
@@ -1682,11 +1685,7 @@
 									$result .= " " . $key;
 
 									if (is_array($val))  $val = implode(" ", $val);
-									if (is_string($val))
-									{
-										if ($this->options["charset"] === "UTF-8" && !self::IsValidUTF8($val))  $val = self::MakeValidUTF8($val);
-										$result .= "=\"" . htmlspecialchars($val, ENT_COMPAT | ENT_HTML5, $this->options["charset"]) . "\"";
-									}
+									if (is_string($val))  $result .= "=\"" . htmlspecialchars($val, ENT_COMPAT | ENT_HTML5, $options["charset"]) . "\"";
 								}
 								$result .= (!$maxpos && $options["output_mode"] === "xml" ? " />" : ">");
 							}
@@ -2039,7 +2038,12 @@
 						$newnodes = new TagFilterNodes();
 						$newpid = 0;
 
-						if ($keepidparents)
+						if ($keepidparents instanceof TagFilterNodes)
+						{
+							$newnodes = clone $keepidparents;
+							$newpid = $newnodes->nextid - 1;
+						}
+						else if ($keepidparents)
 						{
 							$stack = array();
 							$id2 = $this->nodes[$id]["parent"];
