@@ -813,12 +813,75 @@
 			return $info["timed_out"];
 		}
 
+		// Handles partially read input.  Also deals with the hacky workaround to the second bugfix in ProcessState__WriteData().
+		private static function ProcessState__InternalRead(&$state, $size, $endchar = false)
+		{
+			$y = strlen($state["nextread"]);
+			if ($size <= $y)
+			{
+				if ($endchar === false)  $pos = $size;
+				else
+				{
+					$pos = strpos($state["nextread"], $endchar);
+					if ($pos === false)  $pos = $size;
+					else  $pos++;
+				}
+
+				$data = substr($state["nextread"], 0, $pos);
+				$state["nextread"] = (string)substr($state["nextread"], $pos);
+
+				return $data;
+			}
+
+			if ($endchar !== false)
+			{
+				$pos = strpos($state["nextread"], $endchar);
+				if ($pos !== false)
+				{
+					$data = substr($state["nextread"], 0, $pos + 1);
+					$state["nextread"] = (string)substr($state["nextread"], $pos + 1);
+
+					return $data;
+				}
+			}
+
+			$data = $state["nextread"];
+			$state["nextread"] = "";
+			$size -= $y;
+
+			do
+			{
+				if ($state["debug"])  $data2 = fread($state["fp"], $size);
+				else  $data2 = @fread($state["fp"], $size);
+
+				if ($data2 === false || $data2 === "")  return ($data !== "" ? $data : $data2);
+
+				if ($endchar !== false)
+				{
+					$pos = strpos($data2, $endchar);
+					if ($pos !== false)
+					{
+						$data .= substr($data2, 0, $pos + 1);
+						$state["nextread"] = (string)substr($data2, $pos + 1);
+
+						return $data;
+					}
+				}
+
+				$data .= $data2;
+				$size -= strlen($data2);
+			} while ($size > 0 && $endchar !== false);
+
+			return $data;
+		}
+
 		// Reads one or more lines in.
 		private static function ProcessState__ReadLine(&$state)
 		{
 			while (strpos($state["data"], "\n") === false)
 			{
-				$data2 = @fgets($state["fp"], 116000);
+				$data2 = self::ProcessState__InternalRead($state, 116000, "\n");
+
 				if ($data2 === false || $data2 === "")
 				{
 					if (feof($state["fp"]))  return array("success" => false, "error" => self::SMTP_Translate("Remote peer disconnected."), "errorcode" => "peer_disconnected");
@@ -854,11 +917,45 @@
 		{
 			if ($state["data"] !== "")
 			{
-				$result = @fwrite($state["fp"], $state["data"]);
+				// Serious bug in PHP core for non-blocking SSL sockets:  https://bugs.php.net/bug.php?id=72333
+				if ($state["secure"] && $state["async"])
+				{
+					// This is a huge hack that has a pretty good chance of blocking on the socket.
+					// Peeling off up to just 4KB at a time helps to minimize that possibility.  It's better than guaranteed failure of the socket though.
+					@stream_set_blocking($state["fp"], 1);
+					if ($state["debug"])  $result = fwrite($state["fp"], (strlen($state["data"]) > 4096 ? substr($state["data"], 0, 4096) : $state["data"]));
+					else  $result = @fwrite($state["fp"], (strlen($state["data"]) > 4096 ? substr($state["data"], 0, 4096) : $state["data"]));
+					@stream_set_blocking($state["fp"], 0);
+				}
+				else
+				{
+					if ($state["debug"])  $result = fwrite($state["fp"], $state["data"]);
+					else  $result = @fwrite($state["fp"], $state["data"]);
+				}
+
 				if ($result === false || feof($state["fp"]))  return array("success" => false, "error" => self::SMTP_Translate("A fwrite() failure occurred.  Most likely cause:  Connection failure."), "errorcode" => "fwrite_failed");
+
+				// Serious bug in PHP core for all socket types:  https://bugs.php.net/bug.php?id=73535
+				if ($result === 0)
+				{
+					// Temporarily switch to non-blocking sockets and test a one byte read (doesn't matter if data is available or not).
+					// This is a bigger hack than the first hack above.
+					if (!$state["async"])  @stream_set_blocking($state["fp"], 0);
+
+					if ($state["debug"])  $data2 = fread($state["fp"], 1);
+					else  $data2 = @fread($state["fp"], 1);
+
+					if ($data2 === false)  return array("success" => false, "error" => self::SMTPTranslate("Underlying stream encountered a read error."), "errorcode" => "stream_read_error");
+					if ($data2 === "" && feof($state["fp"]))  return array("success" => false, "error" => self::SMTPTranslate("Remote peer disconnected."), "errorcode" => "peer_disconnected");
+
+					if ($data2 !== "")  $state["nextread"] .= $data2;
+
+					if (!$state["async"])  @stream_set_blocking($state["fp"], 1);
+				}
+
 				if ($state["timeout"] !== false && self::GetTimeLeft($state["startts"], $state["timeout"]) == 0)  return array("success" => false, "error" => self::SMTP_Translate("SMTP timeout exceeded."), "errorcode" => "timeout_exceeded");
 
-				$data2 = substr($state["data"], 0, $result);
+				$data2 = (string)substr($state["data"], 0, $result);
 				$state["data"] = (string)substr($state["data"], $result);
 
 				$state["result"]["rawsendsize"] += $result;
@@ -917,12 +1014,12 @@
 
 		public static function WantRead(&$state)
 		{
-			return ($state["state"] === "get_response");
+			return ($state["state"] === "get_response" || $state["state"] === "connecting_enable_crypto");
 		}
 
 		public static function WantWrite(&$state)
 		{
-			return !self::WantRead($state);
+			return (!self::WantRead($state) || $state["state"] === "connecting_enable_crypto");
 		}
 
 		public static function ProcessState(&$state)
@@ -949,18 +1046,42 @@
 							if (!count($writefp))  return array("success" => false, "error" => self::SMTP_Translate("Connection not established yet."), "errorcode" => "no_data");
 						}
 
+						// Deal with failed connections that hang applications.
+						if (isset($state["options"]["streamtimeout"]) && $state["options"]["streamtimeout"] !== false && function_exists("stream_set_timeout"))  @stream_set_timeout($state["fp"], $state["options"]["streamtimeout"]);
+
+						// Switch to the next state.
+						if ($state["async"] && function_exists("stream_socket_client") && $state["secure"])  $state["state"] = "connecting_enable_crypto";
+						else  $state["state"] = "connection_ready";
+
+						break;
+					}
+					case "connecting_enable_crypto":
+					{
+						// This is only used by clients that connect asynchronously via SSL.
+						if ($state["debug"])  $result = stream_socket_enable_crypto($state["fp"], true, STREAM_CRYPTO_METHOD_TLSv1_1_CLIENT | STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT);
+						else  $result = @stream_socket_enable_crypto($state["fp"], true, STREAM_CRYPTO_METHOD_TLSv1_1_CLIENT | STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT);
+
+						if ($result === false)  return self::CleanupErrorState($state, array("success" => false, "error" => self::SMTPTranslate("A stream_socket_enable_crypto() failure occurred.  Most likely cause:  Connection failure or incompatible crypto setup."), "errorcode" => "stream_socket_enable_crypto_failed"));
+						else if ($result === true)  $state["state"] = "connection_ready";
+
+						break;
+					}
+					case "connection_ready":
+					{
 						// Handle peer certificate retrieval.
 						if (function_exists("stream_context_get_options"))
 						{
 							$contextopts = stream_context_get_options($state["fp"]);
-							if ($state["secure"] && isset($state["options"]["sslopts"]) && is_array($state["options"]["sslopts"]) && isset($contextopts["ssl"]["peer_certificate"]))
+
+							if ($state["secure"] && isset($state["options"]["sslopts"]) && is_array($state["options"]["sslopts"]))
 							{
-								if (isset($state["options"]["debug_callback"]) && is_callable($state["options"]["debug_callback"]))  call_user_func_array($state["options"]["debug_callback"], array("peercert", @openssl_x509_parse($contextopts["ssl"]["peer_certificate"]), &$state["options"]["debug_callback_opts"]));
+								if (isset($state["options"]["peer_cert_callback"]) && is_callable($state["options"]["peer_cert_callback"]))
+								{
+									if (isset($contextopts["ssl"]["peer_certificate"]) && !call_user_func_array($state["options"]["peer_cert_callback"], array("peercert", $contextopts["ssl"]["peer_certificate"], &$state["options"]["peer_cert_callback_opts"])))  return array("success" => false, "error" => self::SMTPTranslate("Peer certificate callback returned with a failure condition."), "errorcode" => "peer_cert_callback");
+									if (isset($contextopts["ssl"]["peer_certificate_chain"]) && !call_user_func_array($state["options"]["peer_cert_callback"], array("peercertchain", $contextopts["ssl"]["peer_certificate_chain"], &$state["options"]["peer_cert_callback_opts"])))  return array("success" => false, "error" => self::SMTPTranslate("Peer certificate callback returned with a failure condition."), "errorcode" => "peer_cert_callback");
+								}
 							}
 						}
-
-						// Deal with failed connections that hang applications.
-						if (isset($state["options"]["streamtimeout"]) && $state["options"]["streamtimeout"] !== false && function_exists("stream_set_timeout"))  @stream_set_timeout($state["fp"], $state["options"]["streamtimeout"]);
 
 						$state["result"]["connected"] = microtime(true);
 
@@ -1195,7 +1316,8 @@
 			$server = (isset($options["server"]) ? $options["server"] : "localhost");
 			if ($server == "")  return array("success" => false, "error" => self::SMTP_Translate("Invalid server specified."), "errorcode" => "invalid_server");
 			$secure = (isset($options["secure"]) ? $options["secure"] : false);
-			$protocol = ($secure ? (isset($options["protocol"]) ? strtolower($options["protocol"]) : "ssl") : "tcp");
+			$async = (isset($options["async"]) ? $options["async"] : false);
+			$protocol = ($secure && !$async ? (isset($options["protocol"]) ? strtolower($options["protocol"]) : "ssl") : "tcp");
 			if (function_exists("stream_get_transports") && !in_array($protocol, stream_get_transports()))  return array("success" => false, "error" => self::SMTP_Translate("The desired transport protocol '%s' is not installed.", $protocol), "errorcode" => "transport_not_installed");
 			$port = (isset($options["port"]) ? (int)$options["port"] : -1);
 			if ($port < 0 || $port > 65535)  $port = ($secure ? 465 : 25);
@@ -1233,7 +1355,11 @@
 				if (!isset($options["connecttimeout"]))  $options["connecttimeout"] = 10;
 				$timeleft = self::GetTimeLeft($startts, $timeout);
 				if ($timeleft !== false)  $options["connecttimeout"] = min($options["connecttimeout"], $timeleft);
-				if (!function_exists("stream_socket_client"))  $fp = @fsockopen($protocol . "://" . $server, $port, $errornum, $errorstr, $options["connecttimeout"]);
+				if (!function_exists("stream_socket_client"))
+				{
+					if ($debug)  $fp = fsockopen($protocol . "://" . $host, $port, $errornum, $errorstr, $options["connecttimeout"]);
+					else  $fp = @fsockopen($protocol . "://" . $host, $port, $errornum, $errorstr, $options["connecttimeout"]);
+				}
 				else
 				{
 					$context = @stream_context_create();
@@ -1244,18 +1370,20 @@
 						self::ProcessSSLOptions($options, "sslopts", $server);
 						foreach ($options["sslopts"] as $key => $val)  @stream_context_set_option($context, "ssl", $key, $val);
 					}
-					$fp = @stream_socket_client($protocol . "://" . $server . ":" . $port, $errornum, $errorstr, $options["connecttimeout"], STREAM_CLIENT_CONNECT | (isset($options["async"]) && $options["async"] ? STREAM_CLIENT_ASYNC_CONNECT : 0), $context);
+
+					if ($debug)  $fp = stream_socket_client($protocol . "://" . $host . ":" . $port, $errornum, $errorstr, $options["connecttimeout"], ($async ? STREAM_CLIENT_ASYNC_CONNECT : STREAM_CLIENT_CONNECT), $context);
+					else $fp = @stream_socket_client($protocol . "://" . $host . ":" . $port, $errornum, $errorstr, $options["connecttimeout"], ($async ? STREAM_CLIENT_ASYNC_CONNECT : STREAM_CLIENT_CONNECT), $context);
 				}
 
 				if ($fp === false)  return array("success" => false, "error" => self::SMTP_Translate("Unable to establish a SMTP connection to '%s'.", $protocol . "://" . $server . ":" . $port), "errorcode" => "connection_failure", "info" => $errorstr . " (" . $errornum . ")");
 			}
 
-			if (function_exists("stream_set_blocking"))  @stream_set_blocking($fp, (isset($options["async"]) && $options["async"] ? 0 : 1));
+			if (function_exists("stream_set_blocking"))  @stream_set_blocking($fp, ($async ? 0 : 1));
 
 			// Initialize the connection request state array.
 			$state = array(
 				"fp" => $fp,
-				"async" => (isset($options["async"]) ? $options["async"] : false),
+				"async" => $async,
 				"debug" => $debug,
 				"startts" => $startts,
 				"timeout" => $timeout,
@@ -1273,7 +1401,8 @@
 				"state" => "connecting",
 
 				"options" => $options,
-				"result" => $result
+				"result" => $result,
+				"nextread" => ""
 			);
 
 			// Return the state for async calls.  Caller must call ProcessState().

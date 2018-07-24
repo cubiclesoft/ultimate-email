@@ -272,6 +272,21 @@ Returns:  A boolean of true if the underlying socket has timed out, false otherw
 
 This internal static function calls `stream_get_meta_data()` to determine the validity of the socket.
 
+HTTP::ProcessState__InternalRead(&$state, $size, $endchar = false)
+------------------------------------------------------------------
+
+Access:  private static
+
+Parameters:
+
+* $state - A valid SMTP state array.
+* $size - An integer containing the maximum length to read in.
+* $endchar - A boolean of false or a string containing a single character to stop reading after (Default is false).
+
+Returns:  Normalized fread() output.
+
+This internal static function gets rid of the old fgets() line-by-line retrieval mechanism used by `ProcessState__ReadLine()` and standardizes on fread() with an internal cache.  Doing this also helps to work around a number of bugs in PHP.
+
 SMTP::ProcessState__ReadLine(&$state)
 -------------------------------------
 
