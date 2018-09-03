@@ -218,13 +218,13 @@
 						else if ($lastchr == ")")
 						{
 							$email = trim(substr($email, 0, -1));
-							$depth++;
+							$cfwsdepth++;
 						}
 						else if ($lastchr == "(")
 						{
 							$email = trim(substr($email, 0, -1));
-							$depth--;
-							if (!$depth && substr($email, -1) != ")")  $state = $laststate;
+							$cfwsdepth--;
+							if (!$cfwsdepth && substr($email, -1) != ")")  $state = $laststate;
 						}
 						else  $email = trim(substr($email, 0, -1));
 
@@ -294,14 +294,14 @@
 					if ($currchr == "\\")  $email = trim(substr($email, 2));
 					else if ($currchr == "(")
 					{
-						$depth++;
+						$cfwsdepth++;
 						$email = trim(substr($email, 1));
 					}
 					else if ($currchr == ")")
 					{
 						$email = trim(substr($email, 1));
-						$depth--;
-						if (!$depth && substr($email, 0, 1) != "(")  break;
+						$cfwsdepth--;
+						if (!$cfwsdepth && substr($email, 0, 1) != "(")  break;
 					}
 				}
 			}
@@ -403,7 +403,11 @@
 			// Process results.
 			if (substr($domain, 0, 1) == "[" && substr($domain, -1) == "]")  $result = array("success" => true, "email" => $email, "lookup" => false, "type" => "IP");
 			else if (isset($options["usedns"]) && $options["usedns"] === false)  $result = array("success" => true, "email" => $email, "lookup" => false, "type" => "Domain", "domain" => $domain);
-			else if ((!isset($options["usednsttlcache"]) || $options["usednsttlcache"] === true) && isset(self::$dnsttlcache[$domain]) && self::$dnsttlcache[$domain] >= time())  $result = array("success" => true, "email" => $email, "lookup" => false, "type" => "CachedDNS", "domain" => $domain);
+			else if ((!isset($options["usednsttlcache"]) || $options["usednsttlcache"] === true) && isset(self::$dnsttlcache[$domain]) && self::$dnsttlcache[$domain]["ts"] >= time())
+			{
+				if (self::$dnsttlcache[$domain]["success"])  $result = array("success" => true, "email" => $email, "lookup" => false, "type" => self::$dnsttlcache[$domain]["type"], "domain" => $domain);
+				else  $result = array("success" => false, "error" => self::SMTP_Translate("Invalid domain name or missing DNS record."), "errorcode" => "invalid_domain_or_missing_record", "info" => $domain);
+			}
 			else
 			{
 				// Check for a mail server based on a DNS lookup.
@@ -417,9 +421,9 @@
 		public static function UpdateDNSTTLCache()
 		{
 			$ts = time();
-			foreach (self::$dnsttlcache as $domain => $ts2)
+			foreach (self::$dnsttlcache as $domain => $dinfo)
 			{
-				if ($ts2 > $ts)  unset(self::$dnsttlcache[$domain]);
+				if ($dinfo["ts"] <= $ts)  unset(self::$dnsttlcache[$domain]);
 			}
 		}
 
@@ -444,12 +448,14 @@
 								if ($minttl < 0 || ($answer->ttl > 0 && $answer->ttl < $minttl))  $minttl = $answer->ttl;
 							}
 
-							self::$dnsttlcache[$domain] = time() + $minttl;
+							self::$dnsttlcache[$domain] = array("success" => true, "type" => $type. "ts" => time() + 31 * 24 * 60 * 60);
 						}
 
 						return array("success" => true, "type" => $type, "records" => $response);
 					}
 				}
+
+				if ($cache)  self::$dnsttlcache[$domain] = array("success" => false, "ts" => time() + 3600);
 
 				return array("success" => false, "error" => self::SMTP_Translate("Invalid domain name or missing DNS record."), "errorcode" => "invalid_domain_or_missing_record", "info" => $domain);
 			}
@@ -532,13 +538,13 @@
 							else if ($lastchr == ")")
 							{
 								$data = trim(substr($data, 0, -1));
-								$depth++;
+								$cfwsdepth++;
 							}
 							else if ($lastchr == "(")
 							{
 								$data = trim(substr($data, 0, -1));
-								$depth--;
-								if (!$depth && substr($data, -1) != ")")  $state = $laststate;
+								$cfwsdepth--;
+								if (!$cfwsdepth && substr($data, -1) != ")")  $state = $laststate;
 							}
 							else  $data = trim(substr($data, 0, -1));
 
