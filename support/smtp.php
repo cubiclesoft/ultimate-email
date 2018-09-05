@@ -448,7 +448,7 @@
 								if ($minttl < 0 || ($answer->ttl > 0 && $answer->ttl < $minttl))  $minttl = $answer->ttl;
 							}
 
-							self::$dnsttlcache[$domain] = array("success" => true, "type" => $type. "ts" => time() + 31 * 24 * 60 * 60);
+							self::$dnsttlcache[$domain] = array("success" => true, "type" => $type, "ts" => time() + 31 * 24 * 60 * 60);
 						}
 
 						return array("success" => true, "type" => $type, "records" => $response);
@@ -461,6 +461,8 @@
 			}
 			catch (Exception $e)
 			{
+				if ($cache)  self::$dnsttlcache[$domain] = array("success" => false, "ts" => time() + 3600);
+
 				return array("success" => false, "error" => self::SMTP_Translate("Invalid domain name.  Internal exception occurred."), "errorcode" => "dns_library_exception", "info" => self::SMTP_Translate("%s (%s).", $e->getMessage(), $domain));
 			}
 		}
