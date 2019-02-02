@@ -969,7 +969,6 @@
 				$state["data"] = (string)substr($state["data"], $result);
 
 				$state["result"]["rawsendsize"] += $result;
-				$state["result"]["rawsendheadersize"] += $result;
 
 				if (isset($state["options"]["sendratelimit"]))
 				{
@@ -1367,8 +1366,8 @@
 				if ($timeleft !== false)  $options["connecttimeout"] = min($options["connecttimeout"], $timeleft);
 				if (!function_exists("stream_socket_client"))
 				{
-					if ($debug)  $fp = fsockopen($protocol . "://" . $host, $port, $errornum, $errorstr, $options["connecttimeout"]);
-					else  $fp = @fsockopen($protocol . "://" . $host, $port, $errornum, $errorstr, $options["connecttimeout"]);
+					if ($debug)  $fp = fsockopen($protocol . "://" . $server, $port, $errornum, $errorstr, $options["connecttimeout"]);
+					else  $fp = @fsockopen($protocol . "://" . $server, $port, $errornum, $errorstr, $options["connecttimeout"]);
 				}
 				else
 				{
@@ -1381,8 +1380,8 @@
 						foreach ($options["sslopts"] as $key => $val)  @stream_context_set_option($context, "ssl", $key, $val);
 					}
 
-					if ($debug)  $fp = stream_socket_client($protocol . "://" . $host . ":" . $port, $errornum, $errorstr, $options["connecttimeout"], ($async ? STREAM_CLIENT_ASYNC_CONNECT : STREAM_CLIENT_CONNECT), $context);
-					else $fp = @stream_socket_client($protocol . "://" . $host . ":" . $port, $errornum, $errorstr, $options["connecttimeout"], ($async ? STREAM_CLIENT_ASYNC_CONNECT : STREAM_CLIENT_CONNECT), $context);
+					if ($debug)  $fp = stream_socket_client($protocol . "://" . $server . ":" . $port, $errornum, $errorstr, $options["connecttimeout"], ($async ? STREAM_CLIENT_ASYNC_CONNECT : STREAM_CLIENT_CONNECT), $context);
+					else $fp = @stream_socket_client($protocol . "://" . $server . ":" . $port, $errornum, $errorstr, $options["connecttimeout"], ($async ? STREAM_CLIENT_ASYNC_CONNECT : STREAM_CLIENT_CONNECT), $context);
 				}
 
 				if ($fp === false)  return array("success" => false, "error" => self::SMTP_Translate("Unable to establish a SMTP connection to '%s'.", $protocol . "://" . $server . ":" . $port), "errorcode" => "connection_failure", "info" => $errorstr . " (" . $errornum . ")");
