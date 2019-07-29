@@ -110,9 +110,9 @@
 
 								if ($this->options["keep_comments"])
 								{
-									$content2 = substr($content, $pos + 3, $pos2);
+									$content2 = substr($content, $pos + 3, $pos2 - $pos - 3);
 									if ($this->options["charset"] === "UTF-8" && !self::IsValidUTF8($content2))  $content2 = self::MakeValidUTF8($content2);
-									$content2 = "<!-- " . htmlspecialchars($content2, ENT_COMPAT | ENT_HTML5, $this->options["charset"]) . " -->";
+									$content2 = "<!-- " . trim(htmlspecialchars($content2, ENT_COMPAT | ENT_HTML5, $this->options["charset"])) . " -->";
 
 									// Let a callback handle any necessary changes.
 									if (isset($this->options["content_callback"]) && is_callable($this->options["content_callback"]))  call_user_func_array($this->options["content_callback"], array($this->stack, $result, &$content2, $this->options));
@@ -975,7 +975,7 @@
 			if (isset($this->tfn->nodes[$this->id]) && isset($this->tfn->nodes[$this->id]["attrs"]))
 			{
 				if (is_array($val))  $this->tfn->nodes[$this->id]["attrs"][$key] = $val;
-				else if (is_array($this->tfn->nodes[$this->id]["attrs"][$key]))  $this->tfn->nodes[$this->id]["attrs"][$key][(string)$val] = (string)$val;
+				else if (isset($this->tfn->nodes[$this->id]["attrs"][$key]) && is_array($this->tfn->nodes[$this->id]["attrs"][$key]))  $this->tfn->nodes[$this->id]["attrs"][$key][(string)$val] = (string)$val;
 				else  $this->tfn->nodes[$this->id]["attrs"][$key] = (string)$val;
 			}
 		}
@@ -2323,6 +2323,8 @@
 			$result = trim($result);
 			$result = self::CleanupResults($result);
 
+			if (function_exists("gc_mem_caches"))  gc_mem_caches();
+
 			return $result;
 		}
 
@@ -2341,19 +2343,21 @@
 			{
 				$pid = (count($options["data"]->stackmap) ? $options["data"]->stackmap[0] : 0);
 
+				$tagname2 = (isset($options["tag_name_map"][strtolower($tagname)]) ? $options["tag_name_map"][strtolower($tagname)] : $tagname);
+
 				$options["nodes"]->nodes[$options["nodes"]->nextid] = array(
 					"type" => "element",
 					"tag" => $tagname,
 					"attrs" => $attrs,
 					"parent" => $pid,
 					"parentpos" => count($options["nodes"]->nodes[$pid]["children"]),
-					"children" => (isset($options["void_tags"][$tagname]) ? false : array())
+					"children" => (isset($options["void_tags"][$tagname2]) ? false : array())
 				);
 
 				$options["nodes"]->nodes[$pid]["children"][] = $options["nodes"]->nextid;
 
 				// Append non-void tags to the ID stack.
-				if (!isset($options["void_tags"][$tagname]))  array_unshift($options["data"]->stackmap, $options["nodes"]->nextid);
+				if (!isset($options["void_tags"][$tagname2]))  array_unshift($options["data"]->stackmap, $options["nodes"]->nextid);
 
 				$options["nodes"]->nextid++;
 			}
