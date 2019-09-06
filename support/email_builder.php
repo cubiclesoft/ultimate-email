@@ -218,7 +218,7 @@
 								$option["src"] = "cid:" . $cid;
 							}
 
-							$html .= $prefix . "<img src=\"" . htmlspecialchars($option["src"]) . "\" style=\"display: block; max-width: 100%;" . (isset($option["style"]) ? " " . htmlspecialchars($option["style"]) : "") . "\"" . (isset($option["id"]) ? " id=\"" . htmlspecialchars($option["id"]) . "\"" : "") . (isset($option["class"]) ? " class=\"" . htmlspecialchars($option["class"]) . "\"" : "") . (isset($option["alt"]) ? " alt=\"" . htmlspecialchars($option["alt"]) . "\"" : "") . (isset($option["width"]) ? " width=\"" . htmlspecialchars($option["width"]) . "\"" : "") . (isset($option["height"]) ? " height=\"" . htmlspecialchars($option["height"]) . "\"" : "") . " border=\"0\">\n";
+							$html .= $prefix . "<img src=\"" . htmlspecialchars($option["src"]) . "\" style=\"" . (isset($option["inline"]) && $option["inline"] ? "" : "display: block; max-width: 100%;") . (isset($option["style"]) ? " " . htmlspecialchars($option["style"]) : "") . "\"" . (isset($option["id"]) ? " id=\"" . htmlspecialchars($option["id"]) . "\"" : "") . (isset($option["class"]) ? " class=\"" . htmlspecialchars($option["class"]) . "\"" : "") . (isset($option["alt"]) ? " alt=\"" . htmlspecialchars($option["alt"]) . "\"" : "") . (isset($option["width"]) ? " width=\"" . htmlspecialchars($option["width"]) . "\"" : "") . (isset($option["height"]) ? " height=\"" . htmlspecialchars($option["height"]) . "\"" : "") . (isset($option["align"]) ? " align=\"" . htmlspecialchars($option["align"]) . "\"" : "") . " border=\"0\">\n";
 
 							break;
 						}
