@@ -3,7 +3,7 @@ Ultimate E-mail Toolkit
 
 A PHP library of functions designed to handle all of your one-off e-mail needs under a MIT or LGPL license.  Instead of relying solely on the mostly broken PHP mail() function, this library directly talks to SMTP and POP3 servers just as a regular e-mail client would.  The result is a high level of reliability in delivery of e-mail messages to recipients.  Functions like `ConvertHTMLToText()` and `MakeValidEmailAddress()` make it easy to do complex tasks such as convert ugly HTML input into beautiful plain-text output and analyze an e-mail address to automatically correct common typing mistakes.  All of that while following the various RFCs surrounding e-mail.
 
-[![Donate](https://cubiclesoft.com/res/donate-shield.png)](https://cubiclesoft.com/donate/)
+[![Donate](https://cubiclesoft.com/res/donate-shield.png)](https://cubiclesoft.com/donate/) [![Discord](https://img.shields.io/discord/777282089980526602?label=chat&logo=discord)](https://cubiclesoft.com/product-support/github/)
 
 Features
 --------
