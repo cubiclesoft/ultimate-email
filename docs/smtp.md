@@ -173,7 +173,7 @@ Parameters:
 
 * $domain - A string containing a domain name.
 * $types - An array of strings containing the DNS record types to look up (Default is array("MX", "A")).
-* $nameservers - An array of strings containing the IP addresses of DNS servers to use as resolvers (Default is array("8.8.8.8", "8.8.4.4") - Google DNS).
+* $nameservers - An array of strings containing the IP addresses of DNS servers to use as resolvers or a boolean of true to autodetect (Default is true - local nameservers or Google DNS).
 * $cache - A boolean indicating that the TTL of the domain is to be cached in the SMTP DNS TTL cache (Default is true).
 
 Returns:  A standard array of information.
@@ -449,7 +449,20 @@ Parameters:
 
 Returns:  Nothing.
 
-This internal static function processes the "auto_cainfo", "auto_cn_match", and "auto_sni" options for "sslopts" for SSL/TLS context purposes.
+This internal static function processes the "auto_cainfo", "auto_peer_name", "auto_cn_match", and "auto_sni" options for "sslopts" for SSL/TLS context purposes.
+
+SMTP::GetIDNAHost($host)
+------------------------
+
+Access:  protected static
+
+Parameters:
+
+* $host - A string containing a hostname to convert to IDNA if necessary.
+
+Returns:  A string containing a converted hostname.
+
+This internal static function converts an input Unicode hostname to IDNA.  If no Unicode characters are detected, this function just returns the input string.
 
 SMTP::SendSMTPEmail($toaddr, $fromaddr, $message, $options = array())
 ---------------------------------------------------------------------
@@ -475,7 +488,8 @@ The `$options` array can contain all the `$options` for `SMTP::MakeValidEmailAdd
 * username - A string containing the username to log in to the SMTP server with (Default is "").
 * password - A string containing the password to log in to the SMTP server with (Default is "").
 * connecttimeout - An integer containing the amount of time to wait for the connection to the host to succeed in seconds (Default is 10).
-* sslopts - An array of valid SSL context options key-value pairs to use when connection to a SSL-enabled host.  Also supports "auto_cainfo", "auto_cn_match", and "auto_sni" options to define several context options automatically.
+* sslopts - An array of valid SSL context options key-value pairs to use when connection to a SSL-enabled host.  Also supports "auto_cainfo", "auto_peer_name", "auto_cn_match", and "auto_sni" options to define several context options automatically.
+* sslhostname - A string containing an alternate hostname to match the certificate against.
 * debug - A boolean that determines whether or not the raw SMTP conversation will be returned (Default is false).
 * debug_callback - A string containing a function name of a debugging callback.  The callback function must accept three parameters - callback($type, $data, $opts).
 * debug_callback_opts - Data to pass as the third parameter to the function specified by the 'debug_callback' option.
@@ -573,6 +587,29 @@ This static function queues the request with the MultiAsyncHandler instance ($he
 See MultiAsyncHelper for example usage.
 
 See `SMTP::SendEmail()` for details on the `$options` array.
+
+SMTP::CreateDeliveryStatusMessage($host, $fromaddr, $toaddr, $subject, $notificationmsg, $sender, $origrecipient, $finalrecipient, $action, $status, $diagcode, $origmsg = false, $options = array())
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Access:  public static
+
+Parameters:
+
+* $host - A string containing a host.
+* $fromaddr - A string containing an email address.
+* $toaddr - A string containing an email address.
+* $subject - A string containing a subject line.
+* $notificationmsg - A string containing the notification message.
+* $sender - A string containing a sender header.
+* $origrecipient - A string containing the original recipient header.
+* $finalrecipient - A string containing the final recipient header.
+* $action - A string containing an action header.
+* $status - A string containing a status header.
+* $diagcode - A string containing a diagnostic code header.
+* $origmsg - A string containing the original message or a boolean of false (Default is false).
+* $options - An array containing various options (Default is array()).
+
+This static function generates a `multipart/report` compatible email (e.g. hard bounce messages).
 
 SMTP::SendEmail($fromaddr, $toaddr, $subject, $options = array())
 -----------------------------------------------------------------

@@ -181,7 +181,20 @@ Parameters:
 
 Returns:  Nothing.
 
-This internal static function processes the "auto_cainfo", "auto_cn_match", and "auto_sni" options for "sslopts" for SSL/TLS context purposes.
+This internal static function processes the "auto_cainfo", "auto_peer_name", "auto_cn_match", and "auto_sni" options for "sslopts" for SSL/TLS context purposes.
+
+POP3::GetIDNAHost($host)
+------------------------
+
+Access:  protected static
+
+Parameters:
+
+* $host - A string containing a hostname to convert to IDNA if necessary.
+
+Returns:  A string containing a converted hostname.
+
+This internal static function converts an input Unicode hostname to IDNA.  If no Unicode characters are detected, this function just returns the input string.
 
 POP3::Connect($username, $password, $options = array())
 -------------------------------------------------------
@@ -205,7 +218,8 @@ The `$options` array can contain:
 * protocol - A string containing the preferred low-level protocol.  May be any supported protocol that the PHP stream_get_transports() function supports (e.g. "ssl", "tls", "tlsv1.2", "tcp").
 * port - An integer that specifies which port to connect to (Default is 110 when 'secure' is false, 995 when 'secure' is true).
 * connecttimeout - An integer containing the amount of time to wait for the connection to the host to succeed in seconds (Default is 10).
-* sslopts - An array of valid SSL context options key-value pairs to use when connection to a SSL-enabled host.  Also supports "auto_cainfo", "auto_cn_match", and "auto_sni" options to define several context options automatically.
+* sslopts - An array of valid SSL context options key-value pairs to use when connection to a SSL-enabled host.  Also supports "auto_cainfo", "auto_peer_name", "auto_cn_match", and "auto_sni" options to define several context options automatically.
+* sslhostname - A string containing an alternate hostname to match the certificate against.
 * debug - A boolean that specifies that every function in the class will return the raw POP3 conversation.
 * debug_callback - A string containing a function name of a debugging callback.  The callback function must accept three parameters - callback($type, $data, $opts).
 * debug_callback_opts - Data to pass as the third parameter to the function specified by the 'debug_callback' option.
