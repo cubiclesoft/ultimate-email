@@ -147,7 +147,7 @@ This function is not a validation routine but it can be used as such.  If it suc
 The `$options` array can contain the following options:
 
 * usedns - A boolean that specifies if the function should check for MX and A DNS records for the domain (Default is true).
-* nameservers - An array containing IP addresses of DNS servers to use in order of preference (Default is Google DNS).
+* nameservers - An array containing IP addresses of DNS servers to use as resolvers in order of preference or a boolean of true to autodetect (Default is true - local nameservers or Google DNS).
 
 Checking for the existence of a SMTP mail server via DNS is a great way to avoid bounced e-mail.  DNS checking is done with a slightly modified PEAR::Net_DNS library, which is more versatile than the built-in PHP functions that aren't always available for all platforms.
 
@@ -173,7 +173,7 @@ Parameters:
 
 * $domain - A string containing a domain name.
 * $types - An array of strings containing the DNS record types to look up (Default is array("MX", "A")).
-* $nameservers - An array of strings containing the IP addresses of DNS servers to use as resolvers or a boolean of true to autodetect (Default is true - local nameservers or Google DNS).
+* $nameservers - An array of strings containing the IP addresses of DNS servers to use as resolvers in order of preference or a boolean of true to autodetect (Default is true - local nameservers or Google DNS).
 * $cache - A boolean indicating that the TTL of the domain is to be cached in the SMTP DNS TTL cache (Default is true).
 
 Returns:  A standard array of information.
@@ -484,11 +484,12 @@ The `$options` array can contain all the `$options` for `SMTP::MakeValidEmailAdd
 
 * server - A string containing the SMTP server to connect to (Default is "localhost").
 * port - An integer containing the SMTP port to connect to (Default is 25).
+* secure - A boolean that determines whether or not to connect using SSL (Default is false).
 * protocol - A string containing the preferred low-level protocol.  May be any supported protocol that the PHP stream_get_transports() function supports (e.g. "ssl", "tls", "tlsv1.2", "tcp").
 * username - A string containing the username to log in to the SMTP server with (Default is "").
 * password - A string containing the password to log in to the SMTP server with (Default is "").
 * connecttimeout - An integer containing the amount of time to wait for the connection to the host to succeed in seconds (Default is 10).
-* sslopts - An array of valid SSL context options key-value pairs to use when connection to a SSL-enabled host.  Also supports "auto_cainfo", "auto_peer_name", "auto_cn_match", and "auto_sni" options to define several context options automatically.
+* sslopts - An array of valid SSL context options key-value pairs to use when connecting to a SSL-enabled host.  Also supports "auto_cainfo", "auto_peer_name", "auto_cn_match", and "auto_sni" options to define several context options automatically.
 * sslhostname - A string containing an alternate hostname to match the certificate against.
 * debug - A boolean that determines whether or not the raw SMTP conversation will be returned (Default is false).
 * debug_callback - A string containing a function name of a debugging callback.  The callback function must accept three parameters - callback($type, $data, $opts).
@@ -632,11 +633,11 @@ The `$options` array can contain all the `$options` for `SMTP::SendSMTPEmail()` 
 * replytoaddr - A string containing an e-mail address to use as the 'Reply-To' address (Default is "").
 * ccaddr - A string containing one or more 'CC' e-mail addresses (Default is "").
 * bccaddr - A string containing one or more 'BCC' e-mail addresses (Default is "").
-* headers - A string containing additional e-mail headers.  Usually just the result of a call to GetEmailUserAgent() (Default is "").
+* headers - A string containing additional e-mail headers.  Usually just the result of a call to SMTP::GetUserAgent() (Default is "").
 * textmessage - A string containing the text version of the message (Default is "").
 * htmlmessage - A string containing the HTML version of the message (Default is "").
 * attachments - An array containing information about zero or more attachments (Default is array()).
-* usemail - A boolean that calls the built-in PHP mail() function instead of SendSMTPMail() (Default is false).
+* usemail - A boolean that calls the built-in PHP mail() function instead of SendSMTPEmail() (Default is false).
 * returnresults - A boolean that causes the function to return an array of processed information instead of sending an e-mail (Default is false).
 
 The optional 'attachments' array can contain a number of different options:

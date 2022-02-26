@@ -214,11 +214,11 @@ This function connects to a POP3 server using the specified username and passwor
 The `$options` array can contain:
 
 * server - A string containing the POP3 server to connect to (Default is "localhost").
+* port - An integer that specifies which port to connect to (Default is 110 when 'secure' is false, 995 when 'secure' is true).
 * secure - A boolean that determines whether or not to connect using SSL (Default is false).
 * protocol - A string containing the preferred low-level protocol.  May be any supported protocol that the PHP stream_get_transports() function supports (e.g. "ssl", "tls", "tlsv1.2", "tcp").
-* port - An integer that specifies which port to connect to (Default is 110 when 'secure' is false, 995 when 'secure' is true).
 * connecttimeout - An integer containing the amount of time to wait for the connection to the host to succeed in seconds (Default is 10).
-* sslopts - An array of valid SSL context options key-value pairs to use when connection to a SSL-enabled host.  Also supports "auto_cainfo", "auto_peer_name", "auto_cn_match", and "auto_sni" options to define several context options automatically.
+* sslopts - An array of valid SSL context options key-value pairs to use when connecting to a SSL-enabled host.  Also supports "auto_cainfo", "auto_peer_name", "auto_cn_match", and "auto_sni" options to define several context options automatically.
 * sslhostname - A string containing an alternate hostname to match the certificate against.
 * debug - A boolean that specifies that every function in the class will return the raw POP3 conversation.
 * debug_callback - A string containing a function name of a debugging callback.  The callback function must accept three parameters - callback($type, $data, $opts).
