@@ -1553,7 +1553,7 @@
 		{
 			if (TagFilter::GetParentPos($stack, "pre") === false)
 			{
-				$content = preg_replace('/\s{2,}/', "  ", str_replace(array("\r\n", "\n", "\r", "\t"), " ", $content));
+				$content = preg_replace('/\s{2,}/', "  ", str_replace(array("\r\n", "\n", "\r", "\t"), " ", htmlspecialchars_decode($content)));
 				if ($result !== "" && substr($result, -1) === "\n")  $content = trim($content);
 			}
 		}
